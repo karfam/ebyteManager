@@ -1,0 +1,462 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:padding="16dp">
+
+    <!-- Spinner for Baud Rate -->
+    <Spinner
+        android:id="@+id/deviceSpinner"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginBottom="16dp"
+        android:minHeight="48dp" />
+
+    <!-- Connect Button -->
+    <Button
+        android:id="@+id/connectButton"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Connect" />
+
+    <TextView
+        android:id="@+id/connectionStatusTextView"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="16dp"
+        android:background="#FFFFFF"
+        android:backgroundTint="#FFFFFF"
+        android:text="Status: Not connected"
+        android:textSize="16sp" />
+
+    <TableRow
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="#FDFDFD"
+        android:backgroundTint="#FFFFFF"
+        android:clipChildren="true"
+        android:clipToPadding="true"
+        android:gravity="center_horizontal">
+
+        <Button
+            android:id="@+id/readRegisterButton"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_margin="8dp"
+            android:backgroundTint="#4CAF50"
+            android:text="Read Device" />
+
+        <Button
+            android:id="@+id/writeRegisterButton"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_margin="8dp"
+            android:backgroundTint="#FF5722"
+            android:text="Write Device"
+            android:textColor="#FFFFFF" />
+    </TableRow>
+
+    <!-- Status TextView -->
+    <TextView
+        android:id="@+id/infoTextView"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+
+        android:background="#FFFFFF"
+        android:backgroundTint="#FFFFFF"
+        android:elevation="2dp"
+        android:textSize="16sp" />
+
+    <!-- TableLayout for Displaying Collected Data -->
+
+    <ScrollView
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:layout_margin="8dp">
+        <TableLayout
+            android:id="@+id/dataTable"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:stretchColumns="1"
+            android:padding="4dp">
+
+            <!-- Baud Rate -->
+            <TableRow
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="match_parent"
+                    android:layout_weight="2"
+                    android:background="@drawable/grey_box_border"
+                    android:gravity="center_vertical"
+                    android:padding="8dp"
+                    android:text="Module Baud Rate" />
+
+                <Spinner
+                    android:id="@+id/baudRateSpinner"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:padding="8dp" />
+            </TableRow>
+
+
+            <!-- Air Rate -->
+            <TableRow
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content">
+
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_weight="2"
+                    android:background="@drawable/grey_box_border"
+                    android:gravity="center_vertical"
+                    android:padding="8dp"
+                    android:text="Air Rate" />
+
+                <Spinner
+                    android:id="@+id/airRateSpinner"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:padding="8dp" />
+            </TableRow>
+            <!-- Power -->
+            <TableRow
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content">
+
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_weight="2"
+                    android:background="@drawable/grey_box_border"
+                    android:gravity="center_vertical"
+                    android:padding="8dp"
+                    android:text="Power" />
+
+                <Spinner
+                    android:id="@+id/powerSpinner"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:padding="8dp" />
+            </TableRow>
+
+
+            <!-- Parity -->
+            <TableRow
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content">
+
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_weight="2"
+                    android:background="@drawable/grey_box_border"
+                    android:gravity="center_vertical"
+                    android:padding="8dp"
+                    android:text="Parity" />
+
+                <Spinner
+                    android:id="@+id/paritySpinner"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:padding="8dp" />
+            </TableRow>
+
+            <!-- Packet Size -->
+            <TableRow
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content">
+
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_weight="2"
+                    android:background="@drawable/grey_box_border"
+                    android:gravity="center_vertical"
+                    android:padding="8dp"
+                    android:text="Packet Size" />
+
+                <Spinner
+                    android:id="@+id/packetSizeSpinner"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:padding="8dp" />
+            </TableRow>
+
+            <!-- Transmission Mode-->
+            <TableRow
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content">
+
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="2"
+                    android:background="@drawable/grey_box_border"
+                    android:gravity="center_vertical"
+                    android:minHeight="24dp"
+                    android:padding="8dp"
+                    android:text="TX Mode" />
+
+                <Spinner
+                    android:id="@+id/txModeSpinner"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:padding="8dp" />
+            </TableRow>
+
+            <!-- Channel -->
+            <TableRow
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content">
+
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_weight="2"
+                    android:background="@drawable/grey_box_border"
+                    android:gravity="center_vertical"
+                    android:minHeight="24dp"
+                    android:padding="8dp"
+                    android:text="Channel" />
+
+                <Spinner
+                    android:id="@+id/channelSpinner"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:padding="8dp" />
+            </TableRow>
+
+            <!-- Frequency -->
+            <TableRow
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content">
+
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_weight="2"
+                    android:background="@drawable/grey_box_border"
+                    android:gravity="center_vertical"
+                    android:padding="8dp"
+                    android:text="Frequency" />
+
+                <TextView
+                    android:id="@+id/frequencyTextView"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:background="@drawable/no_underline_background"
+                    android:padding="8dp"
+                    android:textSize="16sp"
+                    android:textColor="@android:color/black"
+                    android:fontFamily="sans-serif"
+                    />
+            </TableRow>
+
+            <!-- NET ID -->
+            <TableRow
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content">
+
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_weight="2"
+                    android:background="@drawable/grey_box_border"
+                    android:gravity="center_vertical"
+                    android:minHeight="24dp"
+                    android:padding="8dp"
+                    android:text="NET ID" />
+
+                <EditText
+                    android:id="@+id/netIdEditText"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:background="@drawable/no_underline_background"
+                    android:inputType="number"
+                    android:padding="8dp" />
+            </TableRow>
+
+            <!-- Key -->
+            <TableRow
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content">
+
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_weight="2"
+                    android:background="@drawable/grey_box_border"
+                    android:gravity="center_vertical"
+                    android:minHeight="24dp"
+                    android:padding="8dp"
+                    android:text="Key" />
+
+                <EditText
+                    android:id="@+id/keyEditText"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:background="@drawable/no_underline_background"
+                    android:inputType="number"
+                    android:padding="8dp" />
+            </TableRow>
+
+            <TableRow
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content">
+
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="2"
+                    android:background="@drawable/grey_box_border"
+                    android:gravity="center_vertical"
+                    android:minHeight="24dp"
+                    android:padding="8dp"
+                    android:text="WOR Role" />
+
+                <Spinner
+                    android:id="@+id/worRoleSpinner"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:padding="8dp" />
+            </TableRow>
+
+            <!-- WOR Cycle -->
+            <TableRow
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content">
+
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="2"
+                    android:background="@drawable/grey_box_border"
+                    android:gravity="center_vertical"
+                    android:minHeight="24dp"
+                    android:padding="8dp"
+                    android:text="WOR Cycle" />
+
+                <Spinner
+                    android:id="@+id/worCycleSpinner"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:padding="8dp" />
+            </TableRow>
+
+            <!-- Relay -->
+            <TableRow
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content">
+
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="2"
+                    android:background="@drawable/grey_box_border"
+                    android:gravity="center_vertical"
+                    android:minHeight="24dp"
+                    android:padding="8dp"
+                    android:text="Relay" />
+                <Spinner
+                    android:id="@+id/relaySpinner"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:padding="8dp" />
+            </TableRow>
+
+            <!-- LBT -->
+            <TableRow
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content">
+
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="2"
+                    android:background="@drawable/grey_box_border"
+                    android:gravity="center_vertical"
+                    android:minHeight="24dp"
+                    android:padding="8dp"
+                    android:text="LBT" />
+
+                <Spinner
+                    android:id="@+id/lbtSpinner"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:padding="8dp" />
+            </TableRow>
+
+            <!-- Packet RSSI -->
+            <TableRow
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content">
+
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="2"
+                    android:background="@drawable/grey_box_border"
+                    android:gravity="center_vertical"
+                    android:minHeight="24dp"
+                    android:padding="8dp"
+                    android:text="Packet RSSI" />
+
+                <Spinner
+                    android:id="@+id/packetRssiSpinner"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:padding="8dp" />
+            </TableRow>
+
+            <!-- Channel RSSI -->
+            <TableRow
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content">
+
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="2"
+                    android:background="@drawable/grey_box_border"
+                    android:gravity="center_vertical"
+                    android:minHeight="24dp"
+                    android:padding="8dp"
+                    android:text="Channel RSSI" />
+
+                <Spinner
+                    android:id="@+id/channelRssiSpinner"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:padding="8dp" />
+            </TableRow>
+
+            <!-- Address -->
+            <TableRow
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content">
+
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_weight="2"
+                    android:background="@drawable/grey_box_border"
+                    android:gravity="center_vertical"
+                    android:padding="8dp"
+                    android:text="Address" />
+
+                <EditText
+                    android:id="@+id/addressEditText"
+                    android:layout_width="match_parent"
+                    android:background="@drawable/no_underline_background"
+                    android:layout_height="wrap_content"
+                    android:inputType="number"
+                    android:padding="8dp" />
+            </TableRow>
+        </TableLayout>
+    </ScrollView>
+</LinearLayout>
