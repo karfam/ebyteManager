@@ -383,11 +383,12 @@ public class MainActivity extends AppCompatActivity {
 
 
 
-    private void readReg3(Runnable onComplete) {
+    private void readReg3(Runnable onSuccess) {
         readRegisters(0x06, 0x01, "C106", hexResponse -> {
             String reg3Hex = hexResponse.substring(6, 8); // Extract REG3 (1 byte)
             int reg3Value = Integer.parseInt(reg3Hex, 16);
             decodeReg3(reg3Value);
+            onSuccess.run();
             if (onComplete != null) {
                 onComplete.run();
             }
@@ -433,6 +434,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
 
+    private BaseRegisterData parseBaseRegisterData(String hexResponse) {
     private RegisterData parseRegisterData(String hexResponse) {
         try {
             // Decode fields
@@ -457,6 +459,11 @@ public class MainActivity extends AppCompatActivity {
             // Decode channel
             int channelValue = Integer.parseInt(channel, 16);
             double frequency = 410.125 + channelValue; // Calculate actual frequency (MHz)
+            return new BaseRegisterData(
+                    addh,
+                    addl,
+                    netId,
+                    channel,
 
             return new RegisterData(
                     addh,
@@ -523,14 +530,59 @@ public class MainActivity extends AppCompatActivity {
 
     private void readMultipleRegisters() {
         readRegisters(0x00, 0x06, "C10006", hexResponse -> {
+            BaseRegisterData baseData = parseBaseRegisterData(hexResponse);
+            if (baseData == null) {
+                return;
+            }
+            readReg3(() -> readProductInformation(productInfo -> updateUiWithRegisterData(baseData, productInfo)));
             RegisterData data = parseRegisterData(hexResponse);
             readReg3(() -> readProductInformation(() -> updateUiWithRegisterData(data)));
         });
     }
 
+    private void updateUiWithRegisterData(BaseRegisterData baseData, String productInfo) {
+        String safeProductInfo = productInfo == null ? "Model: Unknown\nVersion: Unknown" : productInfo;
+        String info = safeProductInfo + "\n" +
+                "Frequency: " + baseData.frequency + "\n" +
+                "Address: 0x" + baseData.addh + baseData.addl + "\n" +
+                "Network ID: " + baseData.netId + "\n" +
+                "Packet Size: " + baseData.packetSize + "\n" +
+                "Baud Rate: " + baseData.baudRate + "\n" +
+                "Parity: " + baseData.parity + "\n" +
+                "Air Speed: " + baseData.airSpeed + "\n" +
+                "Transmit Power: " + baseData.transmitPower + "\n" +
+                "Channel: " + baseData.channelValue + "\n" +
+                "RSSI: " + enableRssi + "\n" +
+                "Transmission Method: " + transmissionMethod + "\n" +
+                "Relay Function: " + relayFunction + "\n" +
+                "LBT Enable: " + lbtEnable;
+
+        infoTextView.setText(info);
+
+        updateSpinnerValue(R.id.baudRateSpinner, baseData.baudRate);
+        updateSpinnerValue(R.id.airRateSpinner, baseData.airSpeed);
+        updateSpinnerValue(R.id.powerSpinner, baseData.transmitPower);
+        updateSpinnerValue(R.id.channelSpinner, baseData.channel);
+        updateSpinnerValue(R.id.paritySpinner, baseData.parity);
+        updateSpinnerValue(R.id.packetSizeSpinner, baseData.packetSize);
+        updateSpinnerValue(R.id.txModeSpinner, "Fixed");
+        updateSpinnerValue(R.id.channelSpinner, baseData.channel);
+        netIDTextView.setText(" " + baseData.netId);
+        keyTextView.setText(" " + baseData.addh + baseData.addl);
+        updateSpinnerValue(R.id.relaySpinner, relayFunction);
+        updateSpinnerValue(R.id.lbtSpinner, lbtEnable);
+        updateSpinnerValue(R.id.packetRssiSpinner, enableRssi);
+        updateSpinnerValue(R.id.channelRssiSpinner, enableRssi);
+        frequencyTextView.setText(" " + baseData.frequency + " MHz");
+    }
 
 
 
+
+    private void readProductInformation(Consumer<String> onSuccess) {
+        readRegisters(0x80, 0x07, "C18007", hexResponse -> {
+            String productInfo = parseAndDisplayProductInformation(hexResponse);
+            onSuccess.accept(productInfo);
     private void readProductInformation(Runnable onComplete) {
         readRegisters(0x80, 0x07, "C18007", hexResponse -> {
            productInfo = parseAndDisplayProductInformation(hexResponse);
@@ -850,6 +902,46 @@ public class MainActivity extends AppCompatActivity {
             case 0b10: return "64 Bytes";
             case 0b11: return "32 Bytes";
             default: return "Unknown Packet Size";
+        }
+    }
+
+    private static class BaseRegisterData {
+        private final String addh;
+        private final String addl;
+        private final String netId;
+        private final String channel;
+        private final String baudRate;
+        private final String parity;
+        private final String airSpeed;
+        private final String packetSize;
+        private final String transmitPower;
+        private final int channelValue;
+        private final double frequency;
+
+        private BaseRegisterData(
+                String addh,
+                String addl,
+                String netId,
+                String channel,
+                String baudRate,
+                String parity,
+                String airSpeed,
+                String packetSize,
+                String transmitPower,
+                int channelValue,
+                double frequency
+        ) {
+            this.addh = addh;
+            this.addl = addl;
+            this.netId = netId;
+            this.channel = channel;
+            this.baudRate = baudRate;
+            this.parity = parity;
+            this.airSpeed = airSpeed;
+            this.packetSize = packetSize;
+            this.transmitPower = transmitPower;
+            this.channelValue = channelValue;
+            this.frequency = frequency;
         }
     }
 
