@@ -80,6 +80,211 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void writeRegister() {
+        if (serialPort == null || !serialPort.isOpen()) {
+            updateStatus("Serial port not open. Connect first.");
+            return;
+        }
+
+        Spinner baudRateSpinner = findViewById(R.id.baudRateSpinner);
+        Spinner airRateSpinner = findViewById(R.id.airRateSpinner);
+        Spinner paritySpinner = findViewById(R.id.paritySpinner);
+        Spinner packetSizeSpinner = findViewById(R.id.packetSizeSpinner);
+        Spinner powerSpinner = findViewById(R.id.powerSpinner);
+        Spinner channelSpinner = findViewById(R.id.channelSpinner);
+        Spinner txModeSpinner = findViewById(R.id.txModeSpinner);
+        Spinner relaySpinner = findViewById(R.id.relaySpinner);
+        Spinner lbtSpinner = findViewById(R.id.lbtSpinner);
+        Spinner packetRssiSpinner = findViewById(R.id.packetRssiSpinner);
+
+        String baudRateSelection = baudRateSpinner.getSelectedItem().toString();
+        String airRateSelection = airRateSpinner.getSelectedItem().toString();
+        String paritySelection = paritySpinner.getSelectedItem().toString();
+        String packetSizeSelection = packetSizeSpinner.getSelectedItem().toString();
+        String powerSelection = powerSpinner.getSelectedItem().toString();
+        String channelSelection = channelSpinner.getSelectedItem().toString();
+        String txModeSelection = txModeSpinner.getSelectedItem().toString();
+        String relaySelection = relaySpinner.getSelectedItem().toString();
+        String lbtSelection = lbtSpinner.getSelectedItem().toString();
+        String packetRssiSelection = packetRssiSpinner.getSelectedItem().toString();
+
+        if ("-".equals(baudRateSelection)
+                || "-".equals(airRateSelection)
+                || "-".equals(paritySelection)
+                || "-".equals(packetSizeSelection)
+                || "-".equals(powerSelection)
+                || "-".equals(channelSelection)
+                || "-".equals(txModeSelection)
+                || "-".equals(relaySelection)
+                || "-".equals(lbtSelection)
+                || "-".equals(packetRssiSelection)) {
+            updateStatus("Select all configuration fields before writing.");
+            return;
+        }
+
+        String netIdValue = netIDTextView.getText().toString().trim();
+        String keyValue = keyTextView.getText().toString().trim();
+        if (netIdValue.isEmpty() || "-".equals(netIdValue) || keyValue.isEmpty() || "-".equals(keyValue)) {
+            updateStatus("Address and NetID must be set before writing.");
+            return;
+        }
+
+        netIdValue = netIdValue.replaceAll("\\s+", "");
+        keyValue = keyValue.replaceAll("\\s+", "");
+        if (netIdValue.length() != 2 || keyValue.length() != 4) {
+            updateStatus("Invalid address or NetID format.");
+            return;
+        }
+
+        try {
+            int addh = Integer.parseInt(keyValue.substring(0, 2), 16);
+            int addl = Integer.parseInt(keyValue.substring(2, 4), 16);
+            int netId = Integer.parseInt(netIdValue, 16);
+
+            int baudRateBits = encodeBaudRate(baudRateSelection);
+            int parityBits = encodeParity(paritySelection);
+            int airRateBits = encodeAirRate(airRateSelection);
+            int packetSizeBits = encodePacketSize(packetSizeSelection);
+            int powerBits = encodeTransmitPower(powerSelection);
+            int channelValue = Integer.parseInt(channelSelection);
+
+            int reg0 = (baudRateBits << 5) | (parityBits << 3) | airRateBits;
+            int reg1 = (packetSizeBits << 6) | powerBits;
+
+            int reg3 = 0;
+            if ("Enabled".equalsIgnoreCase(packetRssiSelection)) {
+                reg3 |= 0b1000_0000;
+            }
+            if ("Fixed-point".equalsIgnoreCase(txModeSelection) || "Fixed-point".equalsIgnoreCase(txModeSelection.trim())) {
+                reg3 |= 0b0100_0000;
+            }
+            if ("Enabled".equalsIgnoreCase(relaySelection)) {
+                reg3 |= 0b0010_0000;
+            }
+            if ("Enabled".equalsIgnoreCase(lbtSelection)) {
+                reg3 |= 0b0001_0000;
+            }
+
+            byte[] writeCommand = new byte[]{
+                    (byte) 0xC2,
+                    (byte) 0x00,
+                    (byte) 0x07,
+                    (byte) addh,
+                    (byte) addl,
+                    (byte) netId,
+                    (byte) reg0,
+                    (byte) reg1,
+                    (byte) channelValue,
+                    (byte) reg3
+            };
+
+            serialPort.write(writeCommand, 1000);
+            updateStatus("Writing registers...");
+
+            byte[] response = new byte[64];
+            int numBytesRead = serialPort.read(response, 1000);
+            if (numBytesRead > 0) {
+                String hexResponse = bytesToHex(response, numBytesRead);
+                Log.d(TAG, "Write response (hex): " + hexResponse);
+            }
+
+            sleep(300);
+            readMultipleRegisters();
+        } catch (NumberFormatException e) {
+            updateStatus("Invalid numeric selection.");
+            Log.e(TAG, "Invalid numeric selection", e);
+        } catch (Exception e) {
+            updateStatus("Write failed: " + e.getMessage());
+            Log.e(TAG, "Error writing register", e);
+        }
+    }
+
+    private int encodeBaudRate(String baudRate) {
+        switch (baudRate) {
+            case "1200 bps":
+                return 0;
+            case "2400 bps":
+                return 1;
+            case "4800 bps":
+                return 2;
+            case "9600 bps":
+                return 3;
+            case "19200 bps":
+                return 4;
+            case "38400 bps":
+                return 5;
+            case "57600 bps":
+                return 6;
+            case "115200 bps":
+                return 7;
+            default:
+                throw new NumberFormatException("Unsupported baud rate");
+        }
+    }
+
+    private int encodeParity(String parity) {
+        switch (parity) {
+            case "8N1":
+                return 0;
+            case "8O1":
+                return 1;
+            case "8E1":
+                return 2;
+            default:
+                throw new NumberFormatException("Unsupported parity");
+        }
+    }
+
+    private int encodeAirRate(String airRate) {
+        switch (airRate) {
+            case "0.8 kbps":
+                return 0;
+            case "1.2 kbps":
+                return 1;
+            case "2.4 kbps":
+                return 2;
+            case "4.8 kbps":
+                return 3;
+            case "9.6 kbps":
+                return 4;
+            case "19.2 kbps":
+                return 5;
+            case "38.4 kbps":
+                return 6;
+            case "62.5 kbps":
+                return 7;
+            default:
+                throw new NumberFormatException("Unsupported air rate");
+        }
+    }
+
+    private int encodePacketSize(String packetSize) {
+        switch (packetSize) {
+            case "240 Bytes":
+                return 0;
+            case "128 Bytes":
+                return 1;
+            case "64 Bytes":
+                return 2;
+            case "32 Bytes":
+                return 3;
+            default:
+                throw new NumberFormatException("Unsupported packet size");
+        }
+    }
+
+    private int encodeTransmitPower(String transmitPower) {
+        switch (transmitPower) {
+            case "22 dBm":
+                return 0;
+            case "17 dBm":
+                return 1;
+            case "13 dBm":
+                return 2;
+            case "10 dBm":
+                return 3;
+            default:
+                throw new NumberFormatException("Unsupported power");
+        }
     }
 
     private void connectToSerialPort() {
