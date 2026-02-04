@@ -36,7 +36,6 @@ public class MainActivity extends AppCompatActivity {
     private UsbSerialPort serialPort;
     private UsbManager usbManager;
     private String enableRssi, transmissionMethod, relayFunction, lbtEnable;
-    private String productInfo;
 
 
     @Override
@@ -344,11 +343,12 @@ public class MainActivity extends AppCompatActivity {
 
 
 
-    private void readReg3() {
+    private void readReg3(Runnable onSuccess) {
         readRegisters(0x06, 0x01, "C106", hexResponse -> {
             String reg3Hex = hexResponse.substring(6, 8); // Extract REG3 (1 byte)
             int reg3Value = Integer.parseInt(reg3Hex, 16);
             decodeReg3(reg3Value);
+            onSuccess.run();
         });
     }
 
@@ -385,7 +385,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
 
-    private void parseAndUpdateData(String hexResponse) {
+    private BaseRegisterData parseBaseRegisterData(String hexResponse) {
         try {
             // Decode fields
             String addh = hexResponse.substring(6, 8); // ADDH
@@ -409,56 +409,24 @@ public class MainActivity extends AppCompatActivity {
             // Decode channel
             int channelValue = Integer.parseInt(channel, 16);
             double frequency = 410.125 + channelValue; // Calculate actual frequency (MHz)
-
-            sleep(1000);
-            readReg3();
-            sleep(1000);
-            readProductInformation();
-
-
-
-            // Build the info string
-            String info = productInfo+ "\n"  +
-                    "Frequency: " + frequency + "\n" +
-                    "Address: 0x" + addh + addl + "\n" +
-                    "Network ID: " + netId + "\n" +
-                    "Packet Size: " + packetSize + "\n" +
-                    "Baud Rate: " + baudRate + "\n" +
-                    "Parity: " + parity + "\n" +
-                    "Air Speed: " + airSpeed + "\n" +
-                    "Transmit Power: " + transmitPower + "\n" +
-                    "Channel: " + channelValue
-                    + "\n" + "RSSI: " + enableRssi + "\n" + "Transmission Method: " + transmissionMethod + "\n" + "Relay Function: " + relayFunction + "\n" + "LBT Enable: " + lbtEnable
-                    ;
-
-            infoTextView.setText(info);
-
-
-            // Update the spinners and text views
-
-              updateSpinnerValue(R.id.baudRateSpinner, baudRate);
-              updateSpinnerValue(R.id.airRateSpinner, airSpeed);
-              updateSpinnerValue(R.id.powerSpinner, transmitPower);
-              updateSpinnerValue(R.id.channelSpinner, channel);
-              updateSpinnerValue(R.id.paritySpinner, parity);
-              updateSpinnerValue(R.id.packetSizeSpinner, packetSize);
-              updateSpinnerValue(R.id.txModeSpinner, "Fixed");
-              updateSpinnerValue(R.id.channelSpinner, channel);
-              netIDTextView.setText(" "+netId);
-              keyTextView.setText(" "+addh+addl);
-              //updateSpinnerValue(R.id.worRoleSpinner, "Master");
-                //updateSpinnerValue(R.id.worCycleSpinner, "250 ms");
-            updateSpinnerValue(R.id.relaySpinner, relayFunction);
-            updateSpinnerValue(R.id.lbtSpinner, lbtEnable);
-            updateSpinnerValue(R.id.packetRssiSpinner, enableRssi);
-            updateSpinnerValue(R.id.channelRssiSpinner, enableRssi);
-            frequencyTextView.setText(" "+frequency + " MHz");
-
-            // Add more spinners and text views here as needed
+            return new BaseRegisterData(
+                    addh,
+                    addl,
+                    netId,
+                    channel,
+                    baudRate,
+                    parity,
+                    airSpeed,
+                    packetSize,
+                    transmitPower,
+                    channelValue,
+                    frequency
+            );
         } catch (Exception e) {
             Log.e(TAG, "Error parsing register response", e);
             updateStatus("Error parsing response: " + e.getMessage());
         }
+        return null;
     }
 
     private void decodeReg3(int reg3Value) {
@@ -471,16 +439,57 @@ public class MainActivity extends AppCompatActivity {
 
     private void readMultipleRegisters() {
         readRegisters(0x00, 0x06, "C10006", hexResponse -> {
-            parseAndUpdateData(hexResponse); // Parse and update all data
+            BaseRegisterData baseData = parseBaseRegisterData(hexResponse);
+            if (baseData == null) {
+                return;
+            }
+            readReg3(() -> readProductInformation(productInfo -> updateUiWithRegisterData(baseData, productInfo)));
         });
+    }
+
+    private void updateUiWithRegisterData(BaseRegisterData baseData, String productInfo) {
+        String safeProductInfo = productInfo == null ? "Model: Unknown\nVersion: Unknown" : productInfo;
+        String info = safeProductInfo + "\n" +
+                "Frequency: " + baseData.frequency + "\n" +
+                "Address: 0x" + baseData.addh + baseData.addl + "\n" +
+                "Network ID: " + baseData.netId + "\n" +
+                "Packet Size: " + baseData.packetSize + "\n" +
+                "Baud Rate: " + baseData.baudRate + "\n" +
+                "Parity: " + baseData.parity + "\n" +
+                "Air Speed: " + baseData.airSpeed + "\n" +
+                "Transmit Power: " + baseData.transmitPower + "\n" +
+                "Channel: " + baseData.channelValue + "\n" +
+                "RSSI: " + enableRssi + "\n" +
+                "Transmission Method: " + transmissionMethod + "\n" +
+                "Relay Function: " + relayFunction + "\n" +
+                "LBT Enable: " + lbtEnable;
+
+        infoTextView.setText(info);
+
+        updateSpinnerValue(R.id.baudRateSpinner, baseData.baudRate);
+        updateSpinnerValue(R.id.airRateSpinner, baseData.airSpeed);
+        updateSpinnerValue(R.id.powerSpinner, baseData.transmitPower);
+        updateSpinnerValue(R.id.channelSpinner, baseData.channel);
+        updateSpinnerValue(R.id.paritySpinner, baseData.parity);
+        updateSpinnerValue(R.id.packetSizeSpinner, baseData.packetSize);
+        updateSpinnerValue(R.id.txModeSpinner, "Fixed");
+        updateSpinnerValue(R.id.channelSpinner, baseData.channel);
+        netIDTextView.setText(" " + baseData.netId);
+        keyTextView.setText(" " + baseData.addh + baseData.addl);
+        updateSpinnerValue(R.id.relaySpinner, relayFunction);
+        updateSpinnerValue(R.id.lbtSpinner, lbtEnable);
+        updateSpinnerValue(R.id.packetRssiSpinner, enableRssi);
+        updateSpinnerValue(R.id.channelRssiSpinner, enableRssi);
+        frequencyTextView.setText(" " + baseData.frequency + " MHz");
     }
 
 
 
 
-    private void readProductInformation() {
+    private void readProductInformation(Consumer<String> onSuccess) {
         readRegisters(0x80, 0x07, "C18007", hexResponse -> {
-           productInfo = parseAndDisplayProductInformation(hexResponse);
+            String productInfo = parseAndDisplayProductInformation(hexResponse);
+            onSuccess.accept(productInfo);
         });
     }
 
@@ -793,6 +802,46 @@ public class MainActivity extends AppCompatActivity {
             case 0b10: return "64 Bytes";
             case 0b11: return "32 Bytes";
             default: return "Unknown Packet Size";
+        }
+    }
+
+    private static class BaseRegisterData {
+        private final String addh;
+        private final String addl;
+        private final String netId;
+        private final String channel;
+        private final String baudRate;
+        private final String parity;
+        private final String airSpeed;
+        private final String packetSize;
+        private final String transmitPower;
+        private final int channelValue;
+        private final double frequency;
+
+        private BaseRegisterData(
+                String addh,
+                String addl,
+                String netId,
+                String channel,
+                String baudRate,
+                String parity,
+                String airSpeed,
+                String packetSize,
+                String transmitPower,
+                int channelValue,
+                double frequency
+        ) {
+            this.addh = addh;
+            this.addl = addl;
+            this.netId = netId;
+            this.channel = channel;
+            this.baudRate = baudRate;
+            this.parity = parity;
+            this.airSpeed = airSpeed;
+            this.packetSize = packetSize;
+            this.transmitPower = transmitPower;
+            this.channelValue = channelValue;
+            this.frequency = frequency;
         }
     }
 
