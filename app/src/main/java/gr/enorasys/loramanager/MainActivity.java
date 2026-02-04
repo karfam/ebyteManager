@@ -355,6 +355,30 @@ public class MainActivity extends AppCompatActivity {
             return;
         }
 
+        Spinner baudRateSpinner = findViewById(R.id.baudRateSpinner);
+        String baudRateSelection = baudRateSpinner.getSelectedItem() != null
+                ? baudRateSpinner.getSelectedItem().toString()
+                : "-";
+        if ("-".equals(baudRateSelection.trim())) {
+            updateStatus("Select a baud rate before connecting.");
+            return;
+        }
+
+        String baudRateDigits = baudRateSelection.replaceAll("[^\\d]", "");
+        if (baudRateDigits.isEmpty()) {
+            updateStatus("Invalid baud rate selection.");
+            return;
+        }
+
+        int baudRate;
+        try {
+            baudRate = Integer.parseInt(baudRateDigits);
+        } catch (NumberFormatException e) {
+            updateStatus("Invalid baud rate selection.");
+            Log.e(TAG, "Invalid baud rate selection: " + baudRateSelection, e);
+            return;
+        }
+
         UsbDeviceConnection connection = usbManager.openDevice(device);
         if (connection == null) {
             updateStatus("Failed to open USB connection.");
@@ -365,10 +389,6 @@ public class MainActivity extends AppCompatActivity {
         try {
             serialPort = driver.getPorts().get(0); // Get the first port
             serialPort.open(connection);
-
-            // Parse baud rate from the spinner
-            String baudRateString = "9600";
-            int baudRate = Integer.parseInt(baudRateString.replaceAll("[^\\d]", ""));
 
             serialPort.setParameters(baudRate, 8, UsbSerialPort.STOPBITS_1, UsbSerialPort.PARITY_NONE);
             updateStatus("Connected at " + baudRate + " baud.");
