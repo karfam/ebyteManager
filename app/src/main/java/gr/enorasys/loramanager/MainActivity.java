@@ -1,8 +1,6 @@
 
 package gr.enorasys.loramanager;
 
-import static java.lang.Thread.sleep;
-
 import android.app.PendingIntent;
 import android.content.BroadcastReceiver;
 import android.content.Context;
@@ -24,6 +22,8 @@ import com.hoho.android.usbserial.driver.UsbSerialPort;
 import com.hoho.android.usbserial.driver.UsbSerialProber;
 
 import java.util.List;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.function.Consumer;
 
 public class MainActivity extends AppCompatActivity {
@@ -37,6 +37,44 @@ public class MainActivity extends AppCompatActivity {
     private UsbManager usbManager;
     private String enableRssi, transmissionMethod, relayFunction, lbtEnable;
     private String productInfo;
+    private final ExecutorService serialExecutor = Executors.newSingleThreadExecutor();
+
+    private static class RegisterData {
+        private final String addh;
+        private final String addl;
+        private final String netId;
+        private final String baudRate;
+        private final String parity;
+        private final String airSpeed;
+        private final String packetSize;
+        private final String transmitPower;
+        private final int channelValue;
+        private final double frequency;
+
+        private RegisterData(
+                String addh,
+                String addl,
+                String netId,
+                String baudRate,
+                String parity,
+                String airSpeed,
+                String packetSize,
+                String transmitPower,
+                int channelValue,
+                double frequency
+        ) {
+            this.addh = addh;
+            this.addl = addl;
+            this.netId = netId;
+            this.baudRate = baudRate;
+            this.parity = parity;
+            this.airSpeed = airSpeed;
+            this.packetSize = packetSize;
+            this.transmitPower = transmitPower;
+            this.channelValue = channelValue;
+            this.frequency = frequency;
+        }
+    }
 
 
     @Override
@@ -135,67 +173,68 @@ public class MainActivity extends AppCompatActivity {
             return;
         }
 
-        try {
-            int addh = Integer.parseInt(keyValue.substring(0, 2), 16);
-            int addl = Integer.parseInt(keyValue.substring(2, 4), 16);
-            int netId = Integer.parseInt(netIdValue, 16);
+        serialExecutor.execute(() -> {
+            try {
+                int addh = Integer.parseInt(keyValue.substring(0, 2), 16);
+                int addl = Integer.parseInt(keyValue.substring(2, 4), 16);
+                int netId = Integer.parseInt(netIdValue, 16);
 
-            int baudRateBits = encodeBaudRate(baudRateSelection);
-            int parityBits = encodeParity(paritySelection);
-            int airRateBits = encodeAirRate(airRateSelection);
-            int packetSizeBits = encodePacketSize(packetSizeSelection);
-            int powerBits = encodeTransmitPower(powerSelection);
-            int channelValue = Integer.parseInt(channelSelection);
+                int baudRateBits = encodeBaudRate(baudRateSelection);
+                int parityBits = encodeParity(paritySelection);
+                int airRateBits = encodeAirRate(airRateSelection);
+                int packetSizeBits = encodePacketSize(packetSizeSelection);
+                int powerBits = encodeTransmitPower(powerSelection);
+                int channelValue = Integer.parseInt(channelSelection);
 
-            int reg0 = (baudRateBits << 5) | (parityBits << 3) | airRateBits;
-            int reg1 = (packetSizeBits << 6) | powerBits;
+                int reg0 = (baudRateBits << 5) | (parityBits << 3) | airRateBits;
+                int reg1 = (packetSizeBits << 6) | powerBits;
 
-            int reg3 = 0;
-            if ("Enabled".equalsIgnoreCase(packetRssiSelection)) {
-                reg3 |= 0b1000_0000;
+                int reg3 = 0;
+                if ("Enabled".equalsIgnoreCase(packetRssiSelection)) {
+                    reg3 |= 0b1000_0000;
+                }
+                if ("Fixed-point".equalsIgnoreCase(txModeSelection) || "Fixed-point".equalsIgnoreCase(txModeSelection.trim())) {
+                    reg3 |= 0b0100_0000;
+                }
+                if ("Enabled".equalsIgnoreCase(relaySelection)) {
+                    reg3 |= 0b0010_0000;
+                }
+                if ("Enabled".equalsIgnoreCase(lbtSelection)) {
+                    reg3 |= 0b0001_0000;
+                }
+
+                byte[] writeCommand = new byte[]{
+                        (byte) 0xC2,
+                        (byte) 0x00,
+                        (byte) 0x07,
+                        (byte) addh,
+                        (byte) addl,
+                        (byte) netId,
+                        (byte) reg0,
+                        (byte) reg1,
+                        (byte) channelValue,
+                        (byte) reg3
+                };
+
+                serialPort.write(writeCommand, 1000);
+                updateStatus("Writing registers...");
+
+                byte[] response = new byte[64];
+                int numBytesRead = serialPort.read(response, 1000);
+                if (numBytesRead > 0) {
+                    String hexResponse = bytesToHex(response, numBytesRead);
+                    Log.d(TAG, "Write response (hex): " + hexResponse);
+                }
+
+                readMultipleRegisters();
+            } catch (NumberFormatException e) {
+                updateStatus("Invalid numeric selection.");
+                Log.e(TAG, "Invalid numeric selection", e);
+            } catch (Exception e) {
+                updateStatus("Write failed: " + e.getMessage());
+                Log.e(TAG, "Error writing register", e);
             }
-            if ("Fixed-point".equalsIgnoreCase(txModeSelection) || "Fixed-point".equalsIgnoreCase(txModeSelection.trim())) {
-                reg3 |= 0b0100_0000;
-            }
-            if ("Enabled".equalsIgnoreCase(relaySelection)) {
-                reg3 |= 0b0010_0000;
-            }
-            if ("Enabled".equalsIgnoreCase(lbtSelection)) {
-                reg3 |= 0b0001_0000;
-            }
-
-            byte[] writeCommand = new byte[]{
-                    (byte) 0xC2,
-                    (byte) 0x00,
-                    (byte) 0x07,
-                    (byte) addh,
-                    (byte) addl,
-                    (byte) netId,
-                    (byte) reg0,
-                    (byte) reg1,
-                    (byte) channelValue,
-                    (byte) reg3
-            };
-
-            serialPort.write(writeCommand, 1000);
-            updateStatus("Writing registers...");
-
-            byte[] response = new byte[64];
-            int numBytesRead = serialPort.read(response, 1000);
-            if (numBytesRead > 0) {
-                String hexResponse = bytesToHex(response, numBytesRead);
-                Log.d(TAG, "Write response (hex): " + hexResponse);
-            }
-
-            sleep(300);
-            readMultipleRegisters();
-        } catch (NumberFormatException e) {
-            updateStatus("Invalid numeric selection.");
-            Log.e(TAG, "Invalid numeric selection", e);
-        } catch (Exception e) {
-            updateStatus("Write failed: " + e.getMessage());
-            Log.e(TAG, "Error writing register", e);
-        }
+        });
     }
 
     private int encodeBaudRate(String baudRate) {
@@ -344,48 +383,57 @@ public class MainActivity extends AppCompatActivity {
 
 
 
-    private void readReg3() {
+    private void readReg3(Runnable onComplete) {
         readRegisters(0x06, 0x01, "C106", hexResponse -> {
             String reg3Hex = hexResponse.substring(6, 8); // Extract REG3 (1 byte)
             int reg3Value = Integer.parseInt(reg3Hex, 16);
             decodeReg3(reg3Value);
+            if (onComplete != null) {
+                onComplete.run();
+            }
         });
     }
 
 
     private void readRegisters(int startAddress, int length, String expectedHeader, Consumer<String> onSuccess) {
-        try {
-            // Prepare and send the read command
-            byte[] readCommand = new byte[]{(byte) 0xC1, (byte) startAddress, (byte) length};
-            serialPort.write(readCommand, 1000);
-            updateStatus("Reading registers...");
-
-            // Read the response
-            byte[] response = new byte[64];
-            int numBytesRead = serialPort.read(response, 1000);
-
-            if (numBytesRead > 0) {
-                String hexResponse = bytesToHex(response, numBytesRead);
-                Log.d(TAG, "Raw response (hex): " + hexResponse);
-
-                // Validate the response header
-                if (hexResponse.startsWith(expectedHeader)) {
-                    onSuccess.accept(hexResponse);
-                    updateStatus("Register data updated.");
-                } else {
-                    updateStatus("Unexpected response: " + hexResponse);
-                }
-            } else {
-                updateStatus("No response: CHECK MODULE STATUS");
+        serialExecutor.execute(() -> {
+            if (serialPort == null || !serialPort.isOpen()) {
+                updateStatus("Serial port not open. Connect first.");
+                return;
             }
-        } catch (Exception e) {
-            updateStatus("Read failed: " + e.getMessage());
-            Log.e(TAG, "Error reading register", e);
-        }
+            try {
+                // Prepare and send the read command
+                byte[] readCommand = new byte[]{(byte) 0xC1, (byte) startAddress, (byte) length};
+                serialPort.write(readCommand, 1000);
+                updateStatus("Reading registers...");
+
+                // Read the response
+                byte[] response = new byte[64];
+                int numBytesRead = serialPort.read(response, 1000);
+
+                if (numBytesRead > 0) {
+                    String hexResponse = bytesToHex(response, numBytesRead);
+                    Log.d(TAG, "Raw response (hex): " + hexResponse);
+
+                    // Validate the response header
+                    if (hexResponse.startsWith(expectedHeader)) {
+                        onSuccess.accept(hexResponse);
+                        updateStatus("Register data updated.");
+                    } else {
+                        updateStatus("Unexpected response: " + hexResponse);
+                    }
+                } else {
+                    updateStatus("No response: CHECK MODULE STATUS");
+                }
+            } catch (Exception e) {
+                updateStatus("Read failed: " + e.getMessage());
+                Log.e(TAG, "Error reading register", e);
+            }
+        });
     }
 
 
-    private void parseAndUpdateData(String hexResponse) {
+    private RegisterData parseRegisterData(String hexResponse) {
         try {
             // Decode fields
             String addh = hexResponse.substring(6, 8); // ADDH
@@ -410,55 +458,59 @@ public class MainActivity extends AppCompatActivity {
             int channelValue = Integer.parseInt(channel, 16);
             double frequency = 410.125 + channelValue; // Calculate actual frequency (MHz)
 
-            sleep(1000);
-            readReg3();
-            sleep(1000);
-            readProductInformation();
-
-
-
-            // Build the info string
-            String info = productInfo+ "\n"  +
-                    "Frequency: " + frequency + "\n" +
-                    "Address: 0x" + addh + addl + "\n" +
-                    "Network ID: " + netId + "\n" +
-                    "Packet Size: " + packetSize + "\n" +
-                    "Baud Rate: " + baudRate + "\n" +
-                    "Parity: " + parity + "\n" +
-                    "Air Speed: " + airSpeed + "\n" +
-                    "Transmit Power: " + transmitPower + "\n" +
-                    "Channel: " + channelValue
-                    + "\n" + "RSSI: " + enableRssi + "\n" + "Transmission Method: " + transmissionMethod + "\n" + "Relay Function: " + relayFunction + "\n" + "LBT Enable: " + lbtEnable
-                    ;
-
-            infoTextView.setText(info);
-
-
-            // Update the spinners and text views
-
-              updateSpinnerValue(R.id.baudRateSpinner, baudRate);
-              updateSpinnerValue(R.id.airRateSpinner, airSpeed);
-              updateSpinnerValue(R.id.powerSpinner, transmitPower);
-              updateSpinnerValue(R.id.channelSpinner, channel);
-              updateSpinnerValue(R.id.paritySpinner, parity);
-              updateSpinnerValue(R.id.packetSizeSpinner, packetSize);
-              updateSpinnerValue(R.id.txModeSpinner, "Fixed");
-              updateSpinnerValue(R.id.channelSpinner, channel);
-              netIDTextView.setText(" "+netId);
-              keyTextView.setText(" "+addh+addl);
-              //updateSpinnerValue(R.id.worRoleSpinner, "Master");
-                //updateSpinnerValue(R.id.worCycleSpinner, "250 ms");
-            updateSpinnerValue(R.id.relaySpinner, relayFunction);
-            updateSpinnerValue(R.id.lbtSpinner, lbtEnable);
-            updateSpinnerValue(R.id.packetRssiSpinner, enableRssi);
-            updateSpinnerValue(R.id.channelRssiSpinner, enableRssi);
-            frequencyTextView.setText(" "+frequency + " MHz");
-
-            // Add more spinners and text views here as needed
+            return new RegisterData(
+                    addh,
+                    addl,
+                    netId,
+                    baudRate,
+                    parity,
+                    airSpeed,
+                    packetSize,
+                    transmitPower,
+                    channelValue,
+                    frequency
+            );
         } catch (Exception e) {
             Log.e(TAG, "Error parsing register response", e);
             updateStatus("Error parsing response: " + e.getMessage());
         }
+        return null;
+    }
+
+    private void updateUiWithRegisterData(RegisterData data) {
+        if (data == null) {
+            return;
+        }
+        runOnUiThread(() -> {
+            String info = productInfo + "\n" +
+                    "Frequency: " + data.frequency + "\n" +
+                    "Address: 0x" + data.addh + data.addl + "\n" +
+                    "Network ID: " + data.netId + "\n" +
+                    "Packet Size: " + data.packetSize + "\n" +
+                    "Baud Rate: " + data.baudRate + "\n" +
+                    "Parity: " + data.parity + "\n" +
+                    "Air Speed: " + data.airSpeed + "\n" +
+                    "Transmit Power: " + data.transmitPower + "\n" +
+                    "Channel: " + data.channelValue
+                    + "\n" + "RSSI: " + enableRssi + "\n" + "Transmission Method: " + transmissionMethod + "\n" + "Relay Function: " + relayFunction + "\n" + "LBT Enable: " + lbtEnable;
+
+            infoTextView.setText(info);
+
+            updateSpinnerValue(R.id.baudRateSpinner, data.baudRate);
+            updateSpinnerValue(R.id.airRateSpinner, data.airSpeed);
+            updateSpinnerValue(R.id.powerSpinner, data.transmitPower);
+            updateSpinnerValue(R.id.channelSpinner, String.valueOf(data.channelValue));
+            updateSpinnerValue(R.id.paritySpinner, data.parity);
+            updateSpinnerValue(R.id.packetSizeSpinner, data.packetSize);
+            updateSpinnerValue(R.id.txModeSpinner, "Fixed");
+            netIDTextView.setText(" " + data.netId);
+            keyTextView.setText(" " + data.addh + data.addl);
+            updateSpinnerValue(R.id.relaySpinner, relayFunction);
+            updateSpinnerValue(R.id.lbtSpinner, lbtEnable);
+            updateSpinnerValue(R.id.packetRssiSpinner, enableRssi);
+            updateSpinnerValue(R.id.channelRssiSpinner, enableRssi);
+            frequencyTextView.setText(" " + data.frequency + " MHz");
+        });
     }
 
     private void decodeReg3(int reg3Value) {
@@ -471,16 +523,20 @@ public class MainActivity extends AppCompatActivity {
 
     private void readMultipleRegisters() {
         readRegisters(0x00, 0x06, "C10006", hexResponse -> {
-            parseAndUpdateData(hexResponse); // Parse and update all data
+            RegisterData data = parseRegisterData(hexResponse);
+            readReg3(() -> readProductInformation(() -> updateUiWithRegisterData(data)));
         });
     }
 
 
 
 
-    private void readProductInformation() {
+    private void readProductInformation(Runnable onComplete) {
         readRegisters(0x80, 0x07, "C18007", hexResponse -> {
            productInfo = parseAndDisplayProductInformation(hexResponse);
+           if (onComplete != null) {
+               onComplete.run();
+           }
         });
     }
 
@@ -641,13 +697,14 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void updateStatus(String message) {
-        connectionStatusTextView.setText("Status: " + message);
+        runOnUiThread(() -> connectionStatusTextView.setText("Status: " + message));
     }
 
     @Override
     protected void onDestroy() {
         super.onDestroy();
         closeSerialPort();
+        serialExecutor.shutdownNow();
         unregisterReceiver(usbReceiver);
     }
 
