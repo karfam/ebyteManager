@@ -1,4 +1,3 @@
-
 package gr.enorasys.loramanager;
 
 import android.app.PendingIntent;
@@ -182,18 +181,18 @@ public class MainActivity extends AppCompatActivity {
             return;
         }
 
-        netIdValue = netIdValue.replaceAll("\\s+", "");
-        keyValue = keyValue.replaceAll("\\s+", "");
-        if (netIdValue.length() != 2 || keyValue.length() != 4) {
+        final String finalNetIdValue = netIdValue.replaceAll("\\s+", "");
+        final String finalKeyValue = keyValue.replaceAll("\\s+", "");
+        if (finalNetIdValue.length() != 2 || finalKeyValue.length() != 4) {
             updateStatus("Invalid address or NetID format.");
             return;
         }
 
         serialExecutor.execute(() -> {
             try {
-                int addh = Integer.parseInt(keyValue.substring(0, 2), 16);
-                int addl = Integer.parseInt(keyValue.substring(2, 4), 16);
-                int netId = Integer.parseInt(netIdValue, 16);
+                int addh = Integer.parseInt(finalKeyValue.substring(0, 2), 16);
+                int addl = Integer.parseInt(finalKeyValue.substring(2, 4), 16);
+                int netId = Integer.parseInt(finalNetIdValue, 16);
 
                 int baudRateBits = encodeBaudRate(baudRateSelection);
                 int parityBits = encodeParity(paritySelection);
