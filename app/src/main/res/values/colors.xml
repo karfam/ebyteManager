@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <!-- Primary colors - Professional Blue -->
     <color name="purple_200">#FFBB86FC</color>
     <color name="purple_500">#FF6200EE</color>
     <color name="purple_700">#FF3700B3</color>
@@ -7,4 +8,39 @@
     <color name="teal_700">#FF018786</color>
     <color name="black">#FF000000</color>
     <color name="white">#FFFFFFFF</color>
+
+    <!-- Professional color palette -->
+    <color name="primary">#1565C0</color>
+    <color name="primary_dark">#0D47A1</color>
+    <color name="primary_light">#42A5F5</color>
+    <color name="accent">#00ACC1</color>
+    <color name="accent_dark">#00838F</color>
+
+    <!-- Surface colors -->
+    <color name="surface">#FFFFFF</color>
+    <color name="surface_variant">#F5F5F5</color>
+    <color name="background">#FAFAFA</color>
+    <color name="card_background">#FFFFFF</color>
+
+    <!-- Text colors -->
+    <color name="text_primary">#212121</color>
+    <color name="text_secondary">#757575</color>
+    <color name="text_hint">#9E9E9E</color>
+    <color name="text_on_primary">#FFFFFF</color>
+
+    <!-- Status colors -->
+    <color name="success">#43A047</color>
+    <color name="success_dark">#2E7D32</color>
+    <color name="warning">#FFA726</color>
+    <color name="error">#E53935</color>
+    <color name="error_dark">#C62828</color>
+
+    <!-- Border and divider -->
+    <color name="divider">#E0E0E0</color>
+    <color name="border">#BDBDBD</color>
+    <color name="border_light">#E0E0E0</color>
+
+    <!-- Table colors -->
+    <color name="table_header">#E3F2FD</color>
+    <color name="table_row_alt">#F5F5F5</color>
 </resources>

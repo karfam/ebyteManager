@@ -1,462 +1,685 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<androidx.coordinatorlayout.widget.CoordinatorLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:orientation="vertical"
-    android:padding="16dp">
+    android:background="@color/background"
+    tools:context=".MainActivity">
 
-    <!-- Spinner for Baud Rate -->
-    <Spinner
-        android:id="@+id/deviceSpinner"
+    <!-- App Bar -->
+    <com.google.android.material.appbar.AppBarLayout
+        android:id="@+id/appBarLayout"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginBottom="16dp"
-        android:minHeight="48dp" />
+        android:background="@drawable/toolbar_background"
+        app:elevation="4dp">
 
-    <!-- Connect Button -->
-    <Button
-        android:id="@+id/connectButton"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:text="Connect" />
+        <androidx.appcompat.widget.Toolbar
+            android:id="@+id/toolbar"
+            android:layout_width="match_parent"
+            android:layout_height="?attr/actionBarSize"
+            android:background="@android:color/transparent"
+            app:title="@string/app_name"
+            app:titleTextColor="@color/white"
+            app:titleTextAppearance="@style/ToolbarTitleStyle" />
 
-    <TextView
-        android:id="@+id/connectionStatusTextView"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="16dp"
-        android:background="#FFFFFF"
-        android:backgroundTint="#FFFFFF"
-        android:text="Status: Not connected"
-        android:textSize="16sp" />
+    </com.google.android.material.appbar.AppBarLayout>
 
-    <TableRow
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:background="#FDFDFD"
-        android:backgroundTint="#FFFFFF"
-        android:clipChildren="true"
-        android:clipToPadding="true"
-        android:gravity="center_horizontal">
-
-        <Button
-            android:id="@+id/readRegisterButton"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_margin="8dp"
-            android:backgroundTint="#4CAF50"
-            android:text="Read Device" />
-
-        <Button
-            android:id="@+id/writeRegisterButton"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_margin="8dp"
-            android:backgroundTint="#FF5722"
-            android:text="Write Device"
-            android:textColor="#FFFFFF" />
-    </TableRow>
-
-    <!-- Status TextView -->
-    <TextView
-        android:id="@+id/infoTextView"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-
-        android:background="#FFFFFF"
-        android:backgroundTint="#FFFFFF"
-        android:elevation="2dp"
-        android:textSize="16sp" />
-
-    <!-- TableLayout for Displaying Collected Data -->
-
-    <ScrollView
+    <androidx.core.widget.NestedScrollView
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:layout_margin="8dp">
-        <TableLayout
-            android:id="@+id/dataTable"
+        android:fillViewport="true"
+        app:layout_behavior="@string/appbar_scrolling_view_behavior">
+
+        <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:stretchColumns="1"
-            android:padding="4dp">
+            android:orientation="vertical"
+            android:padding="16dp">
 
-            <!-- Baud Rate -->
-            <TableRow
+            <!-- Device Connection Card -->
+            <com.google.android.material.card.MaterialCardView
                 android:layout_width="match_parent"
-                android:layout_height="wrap_content">
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="16dp"
+                app:cardCornerRadius="12dp"
+                app:cardElevation="2dp"
+                app:strokeColor="@color/border_light"
+                app:strokeWidth="1dp">
 
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="match_parent"
-                    android:layout_weight="2"
-                    android:background="@drawable/grey_box_border"
-                    android:gravity="center_vertical"
-                    android:padding="8dp"
-                    android:text="Module Baud Rate" />
-
-                <Spinner
-                    android:id="@+id/baudRateSpinner"
+                <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:padding="8dp" />
-            </TableRow>
+                    android:orientation="vertical"
+                    android:padding="16dp">
 
+                    <!-- Section Header -->
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginBottom="12dp"
+                        android:text="Device Connection"
+                        android:textColor="@color/primary"
+                        android:textSize="16sp"
+                        android:textStyle="bold"
+                        android:fontFamily="sans-serif-medium" />
 
-            <!-- Air Rate -->
-            <TableRow
+                    <!-- Device Spinner -->
+                    <com.google.android.material.textfield.TextInputLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginBottom="12dp"
+                        style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox.ExposedDropdownMenu"
+                        android:hint="Select Device">
+
+                        <AutoCompleteTextView
+                            android:id="@+id/deviceSpinner"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:inputType="none"
+                            android:padding="12dp" />
+
+                    </com.google.android.material.textfield.TextInputLayout>
+
+                    <!-- Connect Button -->
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/connectButton"
+                        android:layout_width="match_parent"
+                        android:layout_height="48dp"
+                        android:text="Connect"
+                        android:textAllCaps="false"
+                        app:icon="@drawable/ic_usb"
+                        app:iconGravity="textStart"
+                        app:cornerRadius="8dp"
+                        style="@style/Widget.App.Button.Primary" />
+
+                    <!-- Status Display -->
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="12dp"
+                        android:gravity="center_vertical"
+                        android:orientation="horizontal">
+
+                        <View
+                            android:id="@+id/statusIndicator"
+                            android:layout_width="12dp"
+                            android:layout_height="12dp"
+                            android:layout_marginEnd="8dp"
+                            android:background="@drawable/status_indicator_disconnected" />
+
+                        <TextView
+                            android:id="@+id/connectionStatusTextView"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="Status: Not connected"
+                            android:textColor="@color/text_secondary"
+                            android:textSize="14sp" />
+
+                    </LinearLayout>
+
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
+            <!-- Action Buttons Card -->
+            <com.google.android.material.card.MaterialCardView
                 android:layout_width="match_parent"
-                android:layout_height="wrap_content">
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="16dp"
+                app:cardCornerRadius="12dp"
+                app:cardElevation="2dp"
+                app:strokeColor="@color/border_light"
+                app:strokeWidth="1dp">
 
-                <TextView
-                    android:layout_width="0dp"
-                    android:layout_height="match_parent"
-                    android:layout_weight="2"
-                    android:background="@drawable/grey_box_border"
-                    android:gravity="center_vertical"
-                    android:padding="8dp"
-                    android:text="Air Rate" />
-
-                <Spinner
-                    android:id="@+id/airRateSpinner"
+                <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:padding="8dp" />
-            </TableRow>
-            <!-- Power -->
-            <TableRow
+                    android:orientation="vertical"
+                    android:padding="16dp">
+
+                    <!-- Section Header -->
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginBottom="12dp"
+                        android:text="Device Operations"
+                        android:textColor="@color/primary"
+                        android:textSize="16sp"
+                        android:textStyle="bold"
+                        android:fontFamily="sans-serif-medium" />
+
+                    <!-- Buttons Row -->
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:weightSum="2">
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/readRegisterButton"
+                            android:layout_width="0dp"
+                            android:layout_height="48dp"
+                            android:layout_weight="1"
+                            android:layout_marginEnd="8dp"
+                            android:text="Read Device"
+                            android:textAllCaps="false"
+                            app:cornerRadius="8dp"
+                            style="@style/Widget.App.Button.Success" />
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/writeRegisterButton"
+                            android:layout_width="0dp"
+                            android:layout_height="48dp"
+                            android:layout_weight="1"
+                            android:layout_marginStart="8dp"
+                            android:text="Write Device"
+                            android:textAllCaps="false"
+                            app:cornerRadius="8dp"
+                            style="@style/Widget.App.Button.Warning" />
+
+                    </LinearLayout>
+
+                    <!-- Info TextView -->
+                    <TextView
+                        android:id="@+id/infoTextView"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="12dp"
+                        android:padding="12dp"
+                        android:background="@drawable/info_background"
+                        android:textColor="@color/text_primary"
+                        android:textSize="13sp"
+                        android:fontFamily="monospace"
+                        android:visibility="visible" />
+
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
+            <!-- Configuration Card -->
+            <com.google.android.material.card.MaterialCardView
                 android:layout_width="match_parent"
-                android:layout_height="wrap_content">
+                android:layout_height="wrap_content"
+                app:cardCornerRadius="12dp"
+                app:cardElevation="2dp"
+                app:strokeColor="@color/border_light"
+                app:strokeWidth="1dp">
 
-                <TextView
-                    android:layout_width="0dp"
-                    android:layout_height="match_parent"
-                    android:layout_weight="2"
-                    android:background="@drawable/grey_box_border"
-                    android:gravity="center_vertical"
-                    android:padding="8dp"
-                    android:text="Power" />
-
-                <Spinner
-                    android:id="@+id/powerSpinner"
+                <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:padding="8dp" />
-            </TableRow>
+                    android:orientation="vertical"
+                    android:padding="16dp">
 
+                    <!-- Section Header -->
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginBottom="16dp"
+                        android:text="Device Configuration"
+                        android:textColor="@color/primary"
+                        android:textSize="16sp"
+                        android:textStyle="bold"
+                        android:fontFamily="sans-serif-medium" />
 
-            <!-- Parity -->
-            <TableRow
+                    <!-- Configuration Table -->
+                    <TableLayout
+                        android:id="@+id/dataTable"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:stretchColumns="1"
+                        android:divider="@color/divider"
+                        android:showDividers="middle">
+
+                        <!-- Baud Rate Row -->
+                        <TableRow
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginBottom="8dp">
+
+                            <TextView
+                                android:layout_width="0dp"
+                                android:layout_height="match_parent"
+                                android:layout_weight="1"
+                                android:background="@drawable/grey_box_border"
+                                android:gravity="center_vertical"
+                                android:padding="12dp"
+                                android:text="Module Baud Rate"
+                                android:textColor="@color/text_primary"
+                                android:textSize="14sp" />
+
+                            <Spinner
+                                android:id="@+id/baudRateSpinner"
+                                android:layout_width="match_parent"
+                                android:layout_height="48dp"
+                                android:background="@drawable/no_underline_background"
+                                android:padding="8dp" />
+                        </TableRow>
+
+                        <!-- Air Rate Row -->
+                        <TableRow
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginBottom="8dp">
+
+                            <TextView
+                                android:layout_width="0dp"
+                                android:layout_height="match_parent"
+                                android:layout_weight="1"
+                                android:background="@drawable/grey_box_border"
+                                android:gravity="center_vertical"
+                                android:padding="12dp"
+                                android:text="Air Rate"
+                                android:textColor="@color/text_primary"
+                                android:textSize="14sp" />
+
+                            <Spinner
+                                android:id="@+id/airRateSpinner"
+                                android:layout_width="match_parent"
+                                android:layout_height="48dp"
+                                android:background="@drawable/no_underline_background"
+                                android:padding="8dp" />
+                        </TableRow>
+
+                        <!-- Power Row -->
+                        <TableRow
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginBottom="8dp">
+
+                            <TextView
+                                android:layout_width="0dp"
+                                android:layout_height="match_parent"
+                                android:layout_weight="1"
+                                android:background="@drawable/grey_box_border"
+                                android:gravity="center_vertical"
+                                android:padding="12dp"
+                                android:text="Power"
+                                android:textColor="@color/text_primary"
+                                android:textSize="14sp" />
+
+                            <Spinner
+                                android:id="@+id/powerSpinner"
+                                android:layout_width="match_parent"
+                                android:layout_height="48dp"
+                                android:background="@drawable/no_underline_background"
+                                android:padding="8dp" />
+                        </TableRow>
+
+                        <!-- Parity Row -->
+                        <TableRow
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginBottom="8dp">
+
+                            <TextView
+                                android:layout_width="0dp"
+                                android:layout_height="match_parent"
+                                android:layout_weight="1"
+                                android:background="@drawable/grey_box_border"
+                                android:gravity="center_vertical"
+                                android:padding="12dp"
+                                android:text="Parity"
+                                android:textColor="@color/text_primary"
+                                android:textSize="14sp" />
+
+                            <Spinner
+                                android:id="@+id/paritySpinner"
+                                android:layout_width="match_parent"
+                                android:layout_height="48dp"
+                                android:background="@drawable/no_underline_background"
+                                android:padding="8dp" />
+                        </TableRow>
+
+                        <!-- Packet Size Row -->
+                        <TableRow
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginBottom="8dp">
+
+                            <TextView
+                                android:layout_width="0dp"
+                                android:layout_height="match_parent"
+                                android:layout_weight="1"
+                                android:background="@drawable/grey_box_border"
+                                android:gravity="center_vertical"
+                                android:padding="12dp"
+                                android:text="Packet Size"
+                                android:textColor="@color/text_primary"
+                                android:textSize="14sp" />
+
+                            <Spinner
+                                android:id="@+id/packetSizeSpinner"
+                                android:layout_width="match_parent"
+                                android:layout_height="48dp"
+                                android:background="@drawable/no_underline_background"
+                                android:padding="8dp" />
+                        </TableRow>
+
+                        <!-- TX Mode Row -->
+                        <TableRow
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginBottom="8dp">
+
+                            <TextView
+                                android:layout_width="0dp"
+                                android:layout_height="match_parent"
+                                android:layout_weight="1"
+                                android:background="@drawable/grey_box_border"
+                                android:gravity="center_vertical"
+                                android:padding="12dp"
+                                android:text="TX Mode"
+                                android:textColor="@color/text_primary"
+                                android:textSize="14sp" />
+
+                            <Spinner
+                                android:id="@+id/txModeSpinner"
+                                android:layout_width="match_parent"
+                                android:layout_height="48dp"
+                                android:background="@drawable/no_underline_background"
+                                android:padding="8dp" />
+                        </TableRow>
+
+                        <!-- Channel Row -->
+                        <TableRow
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginBottom="8dp">
+
+                            <TextView
+                                android:layout_width="0dp"
+                                android:layout_height="match_parent"
+                                android:layout_weight="1"
+                                android:background="@drawable/grey_box_border"
+                                android:gravity="center_vertical"
+                                android:padding="12dp"
+                                android:text="Channel"
+                                android:textColor="@color/text_primary"
+                                android:textSize="14sp" />
+
+                            <Spinner
+                                android:id="@+id/channelSpinner"
+                                android:layout_width="match_parent"
+                                android:layout_height="48dp"
+                                android:background="@drawable/no_underline_background"
+                                android:padding="8dp" />
+                        </TableRow>
+
+                        <!-- Frequency Row -->
+                        <TableRow
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginBottom="8dp">
+
+                            <TextView
+                                android:layout_width="0dp"
+                                android:layout_height="match_parent"
+                                android:layout_weight="1"
+                                android:background="@drawable/grey_box_border"
+                                android:gravity="center_vertical"
+                                android:padding="12dp"
+                                android:text="Frequency"
+                                android:textColor="@color/text_primary"
+                                android:textSize="14sp" />
+
+                            <TextView
+                                android:id="@+id/frequencyTextView"
+                                android:layout_width="match_parent"
+                                android:layout_height="48dp"
+                                android:background="@drawable/no_underline_background"
+                                android:gravity="center_vertical"
+                                android:padding="12dp"
+                                android:textColor="@color/text_primary"
+                                android:textSize="14sp"
+                                android:fontFamily="sans-serif" />
+                        </TableRow>
+
+                        <!-- NET ID Row -->
+                        <TableRow
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginBottom="8dp">
+
+                            <TextView
+                                android:layout_width="0dp"
+                                android:layout_height="match_parent"
+                                android:layout_weight="1"
+                                android:background="@drawable/grey_box_border"
+                                android:gravity="center_vertical"
+                                android:padding="12dp"
+                                android:text="NET ID"
+                                android:textColor="@color/text_primary"
+                                android:textSize="14sp" />
+
+                            <EditText
+                                android:id="@+id/netIdEditText"
+                                android:layout_width="match_parent"
+                                android:layout_height="48dp"
+                                android:background="@drawable/no_underline_background"
+                                android:inputType="number"
+                                android:padding="12dp"
+                                android:textColor="@color/text_primary"
+                                android:textSize="14sp" />
+                        </TableRow>
+
+                        <!-- Key Row -->
+                        <TableRow
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginBottom="8dp">
+
+                            <TextView
+                                android:layout_width="0dp"
+                                android:layout_height="match_parent"
+                                android:layout_weight="1"
+                                android:background="@drawable/grey_box_border"
+                                android:gravity="center_vertical"
+                                android:padding="12dp"
+                                android:text="Key"
+                                android:textColor="@color/text_primary"
+                                android:textSize="14sp" />
+
+                            <EditText
+                                android:id="@+id/keyEditText"
+                                android:layout_width="match_parent"
+                                android:layout_height="48dp"
+                                android:background="@drawable/no_underline_background"
+                                android:inputType="number"
+                                android:padding="12dp"
+                                android:textColor="@color/text_primary"
+                                android:textSize="14sp" />
+                        </TableRow>
+
+                        <!-- WOR Role Row -->
+                        <TableRow
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginBottom="8dp">
+
+                            <TextView
+                                android:layout_width="0dp"
+                                android:layout_height="match_parent"
+                                android:layout_weight="1"
+                                android:background="@drawable/grey_box_border"
+                                android:gravity="center_vertical"
+                                android:padding="12dp"
+                                android:text="WOR Role"
+                                android:textColor="@color/text_primary"
+                                android:textSize="14sp" />
+
+                            <Spinner
+                                android:id="@+id/worRoleSpinner"
+                                android:layout_width="match_parent"
+                                android:layout_height="48dp"
+                                android:background="@drawable/no_underline_background"
+                                android:padding="8dp" />
+                        </TableRow>
+
+                        <!-- WOR Cycle Row -->
+                        <TableRow
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginBottom="8dp">
+
+                            <TextView
+                                android:layout_width="0dp"
+                                android:layout_height="match_parent"
+                                android:layout_weight="1"
+                                android:background="@drawable/grey_box_border"
+                                android:gravity="center_vertical"
+                                android:padding="12dp"
+                                android:text="WOR Cycle"
+                                android:textColor="@color/text_primary"
+                                android:textSize="14sp" />
+
+                            <Spinner
+                                android:id="@+id/worCycleSpinner"
+                                android:layout_width="match_parent"
+                                android:layout_height="48dp"
+                                android:background="@drawable/no_underline_background"
+                                android:padding="8dp" />
+                        </TableRow>
+
+                        <!-- Relay Row -->
+                        <TableRow
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginBottom="8dp">
+
+                            <TextView
+                                android:layout_width="0dp"
+                                android:layout_height="match_parent"
+                                android:layout_weight="1"
+                                android:background="@drawable/grey_box_border"
+                                android:gravity="center_vertical"
+                                android:padding="12dp"
+                                android:text="Relay"
+                                android:textColor="@color/text_primary"
+                                android:textSize="14sp" />
+
+                            <Spinner
+                                android:id="@+id/relaySpinner"
+                                android:layout_width="match_parent"
+                                android:layout_height="48dp"
+                                android:background="@drawable/no_underline_background"
+                                android:padding="8dp" />
+                        </TableRow>
+
+                        <!-- LBT Row -->
+                        <TableRow
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginBottom="8dp">
+
+                            <TextView
+                                android:layout_width="0dp"
+                                android:layout_height="match_parent"
+                                android:layout_weight="1"
+                                android:background="@drawable/grey_box_border"
+                                android:gravity="center_vertical"
+                                android:padding="12dp"
+                                android:text="LBT"
+                                android:textColor="@color/text_primary"
+                                android:textSize="14sp" />
+
+                            <Spinner
+                                android:id="@+id/lbtSpinner"
+                                android:layout_width="match_parent"
+                                android:layout_height="48dp"
+                                android:background="@drawable/no_underline_background"
+                                android:padding="8dp" />
+                        </TableRow>
+
+                        <!-- Packet RSSI Row -->
+                        <TableRow
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginBottom="8dp">
+
+                            <TextView
+                                android:layout_width="0dp"
+                                android:layout_height="match_parent"
+                                android:layout_weight="1"
+                                android:background="@drawable/grey_box_border"
+                                android:gravity="center_vertical"
+                                android:padding="12dp"
+                                android:text="Packet RSSI"
+                                android:textColor="@color/text_primary"
+                                android:textSize="14sp" />
+
+                            <Spinner
+                                android:id="@+id/packetRssiSpinner"
+                                android:layout_width="match_parent"
+                                android:layout_height="48dp"
+                                android:background="@drawable/no_underline_background"
+                                android:padding="8dp" />
+                        </TableRow>
+
+                        <!-- Channel RSSI Row -->
+                        <TableRow
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginBottom="8dp">
+
+                            <TextView
+                                android:layout_width="0dp"
+                                android:layout_height="match_parent"
+                                android:layout_weight="1"
+                                android:background="@drawable/grey_box_border"
+                                android:gravity="center_vertical"
+                                android:padding="12dp"
+                                android:text="Channel RSSI"
+                                android:textColor="@color/text_primary"
+                                android:textSize="14sp" />
+
+                            <Spinner
+                                android:id="@+id/channelRssiSpinner"
+                                android:layout_width="match_parent"
+                                android:layout_height="48dp"
+                                android:background="@drawable/no_underline_background"
+                                android:padding="8dp" />
+                        </TableRow>
+
+                        <!-- Address Row -->
+                        <TableRow
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content">
+
+                            <TextView
+                                android:layout_width="0dp"
+                                android:layout_height="match_parent"
+                                android:layout_weight="1"
+                                android:background="@drawable/grey_box_border"
+                                android:gravity="center_vertical"
+                                android:padding="12dp"
+                                android:text="Address"
+                                android:textColor="@color/text_primary"
+                                android:textSize="14sp" />
+
+                            <EditText
+                                android:id="@+id/addressEditText"
+                                android:layout_width="match_parent"
+                                android:layout_height="48dp"
+                                android:background="@drawable/no_underline_background"
+                                android:inputType="number"
+                                android:padding="12dp"
+                                android:textColor="@color/text_primary"
+                                android:textSize="14sp" />
+                        </TableRow>
+
+                    </TableLayout>
+
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
+            <!-- Bottom spacing -->
+            <View
                 android:layout_width="match_parent"
-                android:layout_height="wrap_content">
+                android:layout_height="16dp" />
 
-                <TextView
-                    android:layout_width="0dp"
-                    android:layout_height="match_parent"
-                    android:layout_weight="2"
-                    android:background="@drawable/grey_box_border"
-                    android:gravity="center_vertical"
-                    android:padding="8dp"
-                    android:text="Parity" />
+        </LinearLayout>
 
-                <Spinner
-                    android:id="@+id/paritySpinner"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:padding="8dp" />
-            </TableRow>
+    </androidx.core.widget.NestedScrollView>
 
-            <!-- Packet Size -->
-            <TableRow
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content">
-
-                <TextView
-                    android:layout_width="0dp"
-                    android:layout_height="match_parent"
-                    android:layout_weight="2"
-                    android:background="@drawable/grey_box_border"
-                    android:gravity="center_vertical"
-                    android:padding="8dp"
-                    android:text="Packet Size" />
-
-                <Spinner
-                    android:id="@+id/packetSizeSpinner"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:padding="8dp" />
-            </TableRow>
-
-            <!-- Transmission Mode-->
-            <TableRow
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content">
-
-                <TextView
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="2"
-                    android:background="@drawable/grey_box_border"
-                    android:gravity="center_vertical"
-                    android:minHeight="24dp"
-                    android:padding="8dp"
-                    android:text="TX Mode" />
-
-                <Spinner
-                    android:id="@+id/txModeSpinner"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:padding="8dp" />
-            </TableRow>
-
-            <!-- Channel -->
-            <TableRow
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content">
-
-                <TextView
-                    android:layout_width="0dp"
-                    android:layout_height="match_parent"
-                    android:layout_weight="2"
-                    android:background="@drawable/grey_box_border"
-                    android:gravity="center_vertical"
-                    android:minHeight="24dp"
-                    android:padding="8dp"
-                    android:text="Channel" />
-
-                <Spinner
-                    android:id="@+id/channelSpinner"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:padding="8dp" />
-            </TableRow>
-
-            <!-- Frequency -->
-            <TableRow
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content">
-
-                <TextView
-                    android:layout_width="0dp"
-                    android:layout_height="match_parent"
-                    android:layout_weight="2"
-                    android:background="@drawable/grey_box_border"
-                    android:gravity="center_vertical"
-                    android:padding="8dp"
-                    android:text="Frequency" />
-
-                <TextView
-                    android:id="@+id/frequencyTextView"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:background="@drawable/no_underline_background"
-                    android:padding="8dp"
-                    android:textSize="16sp"
-                    android:textColor="@android:color/black"
-                    android:fontFamily="sans-serif"
-                    />
-            </TableRow>
-
-            <!-- NET ID -->
-            <TableRow
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content">
-
-                <TextView
-                    android:layout_width="0dp"
-                    android:layout_height="match_parent"
-                    android:layout_weight="2"
-                    android:background="@drawable/grey_box_border"
-                    android:gravity="center_vertical"
-                    android:minHeight="24dp"
-                    android:padding="8dp"
-                    android:text="NET ID" />
-
-                <EditText
-                    android:id="@+id/netIdEditText"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:background="@drawable/no_underline_background"
-                    android:inputType="number"
-                    android:padding="8dp" />
-            </TableRow>
-
-            <!-- Key -->
-            <TableRow
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content">
-
-                <TextView
-                    android:layout_width="0dp"
-                    android:layout_height="match_parent"
-                    android:layout_weight="2"
-                    android:background="@drawable/grey_box_border"
-                    android:gravity="center_vertical"
-                    android:minHeight="24dp"
-                    android:padding="8dp"
-                    android:text="Key" />
-
-                <EditText
-                    android:id="@+id/keyEditText"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:background="@drawable/no_underline_background"
-                    android:inputType="number"
-                    android:padding="8dp" />
-            </TableRow>
-
-            <TableRow
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content">
-
-                <TextView
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="2"
-                    android:background="@drawable/grey_box_border"
-                    android:gravity="center_vertical"
-                    android:minHeight="24dp"
-                    android:padding="8dp"
-                    android:text="WOR Role" />
-
-                <Spinner
-                    android:id="@+id/worRoleSpinner"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:padding="8dp" />
-            </TableRow>
-
-            <!-- WOR Cycle -->
-            <TableRow
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content">
-
-                <TextView
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="2"
-                    android:background="@drawable/grey_box_border"
-                    android:gravity="center_vertical"
-                    android:minHeight="24dp"
-                    android:padding="8dp"
-                    android:text="WOR Cycle" />
-
-                <Spinner
-                    android:id="@+id/worCycleSpinner"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:padding="8dp" />
-            </TableRow>
-
-            <!-- Relay -->
-            <TableRow
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content">
-
-                <TextView
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="2"
-                    android:background="@drawable/grey_box_border"
-                    android:gravity="center_vertical"
-                    android:minHeight="24dp"
-                    android:padding="8dp"
-                    android:text="Relay" />
-                <Spinner
-                    android:id="@+id/relaySpinner"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:padding="8dp" />
-            </TableRow>
-
-            <!-- LBT -->
-            <TableRow
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content">
-
-                <TextView
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="2"
-                    android:background="@drawable/grey_box_border"
-                    android:gravity="center_vertical"
-                    android:minHeight="24dp"
-                    android:padding="8dp"
-                    android:text="LBT" />
-
-                <Spinner
-                    android:id="@+id/lbtSpinner"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:padding="8dp" />
-            </TableRow>
-
-            <!-- Packet RSSI -->
-            <TableRow
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content">
-
-                <TextView
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="2"
-                    android:background="@drawable/grey_box_border"
-                    android:gravity="center_vertical"
-                    android:minHeight="24dp"
-                    android:padding="8dp"
-                    android:text="Packet RSSI" />
-
-                <Spinner
-                    android:id="@+id/packetRssiSpinner"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:padding="8dp" />
-            </TableRow>
-
-            <!-- Channel RSSI -->
-            <TableRow
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content">
-
-                <TextView
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="2"
-                    android:background="@drawable/grey_box_border"
-                    android:gravity="center_vertical"
-                    android:minHeight="24dp"
-                    android:padding="8dp"
-                    android:text="Channel RSSI" />
-
-                <Spinner
-                    android:id="@+id/channelRssiSpinner"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:padding="8dp" />
-            </TableRow>
-
-            <!-- Address -->
-            <TableRow
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content">
-
-                <TextView
-                    android:layout_width="0dp"
-                    android:layout_height="match_parent"
-                    android:layout_weight="2"
-                    android:background="@drawable/grey_box_border"
-                    android:gravity="center_vertical"
-                    android:padding="8dp"
-                    android:text="Address" />
-
-                <EditText
-                    android:id="@+id/addressEditText"
-                    android:layout_width="match_parent"
-                    android:background="@drawable/no_underline_background"
-                    android:layout_height="wrap_content"
-                    android:inputType="number"
-                    android:padding="8dp" />
-            </TableRow>
-        </TableLayout>
-    </ScrollView>
-</LinearLayout>
+</androidx.coordinatorlayout.widget.CoordinatorLayout>

@@ -8,13 +8,17 @@ import android.content.IntentFilter;
 import android.hardware.usb.UsbDevice;
 import android.hardware.usb.UsbDeviceConnection;
 import android.hardware.usb.UsbManager;
+import android.os.Build;
 import android.os.Bundle;
 import android.util.Log;
 import android.widget.ArrayAdapter;
+import android.widget.AutoCompleteTextView;
 import android.widget.Button;
 import android.widget.Spinner;
 import android.widget.TextView;
+import android.view.View;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.appcompat.widget.Toolbar;
 
 import com.hoho.android.usbserial.driver.UsbSerialDriver;
 import com.hoho.android.usbserial.driver.UsbSerialPort;
@@ -29,9 +33,11 @@ public class MainActivity extends AppCompatActivity {
 
     private static final String TAG = "loramanager";
     private static final String ACTION_USB_PERMISSION = "gr.enorasys.loramanager.USB_PERMISSION";
-    private Spinner ebyteDeviceSpinner, worRoleSpinner, worCycleSpinner, relaySpinner;
+    private AutoCompleteTextView ebyteDeviceSpinner;
+    private Spinner worRoleSpinner, worCycleSpinner, relaySpinner;
     private Button connectButton, readRegisterButton,writeRegisterButton;
     private TextView connectionStatusTextView, infoTextView,frequencyTextView,netIDTextView,keyTextView;
+    private View statusIndicator;
     private UsbSerialPort serialPort;
     private UsbManager usbManager;
     private String enableRssi, transmissionMethod, relayFunction, lbtEnable;
@@ -97,12 +103,17 @@ public class MainActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
+        // Set up the toolbar
+        Toolbar toolbar = findViewById(R.id.toolbar);
+        setSupportActionBar(toolbar);
+
         // Initialize views
         ebyteDeviceSpinner = findViewById(R.id.deviceSpinner);
         connectButton = findViewById(R.id.connectButton);
         readRegisterButton = findViewById(R.id.readRegisterButton);
         writeRegisterButton = findViewById(R.id.writeRegisterButton);
         connectionStatusTextView = findViewById(R.id.connectionStatusTextView);
+        statusIndicator = findViewById(R.id.statusIndicator);
         infoTextView = findViewById(R.id.infoTextView);
         frequencyTextView = findViewById(R.id.frequencyTextView);
         frequencyTextView.setText("-");
@@ -122,7 +133,11 @@ public class MainActivity extends AppCompatActivity {
 
         // Register USB permission broadcast receiver
         IntentFilter filter = new IntentFilter(ACTION_USB_PERMISSION);
-        registerReceiver(usbReceiver, filter, Context.RECEIVER_NOT_EXPORTED);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            registerReceiver(usbReceiver, filter, Context.RECEIVER_NOT_EXPORTED);
+        } else {
+            registerReceiver(usbReceiver, filter);
+        }
 
         // Set up connect button
         connectButton.setOnClickListener(view -> connectToSerialPort());
@@ -359,11 +374,20 @@ public class MainActivity extends AppCompatActivity {
         UsbDevice device = driver.getDevice();
 
         if (!usbManager.hasPermission(device)) {
+            // Create an explicit Intent (required for Android 14+)
+            Intent intent = new Intent(ACTION_USB_PERMISSION);
+            intent.setPackage(getPackageName());
+
+            // Use FLAG_IMMUTABLE for Android 12+ (required for Android 14+)
+            int permissionFlags = PendingIntent.FLAG_UPDATE_CURRENT;
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                permissionFlags |= PendingIntent.FLAG_IMMUTABLE;
+            }
             PendingIntent permissionIntent = PendingIntent.getBroadcast(
                     this,
                     0,
-                    new Intent(ACTION_USB_PERMISSION),
-                    PendingIntent.FLAG_IMMUTABLE
+                    intent,
+                    permissionFlags
             );
             usbManager.requestPermission(device, permissionIntent);
             updateStatus("Requesting USB permission...");
@@ -375,8 +399,9 @@ public class MainActivity extends AppCompatActivity {
                 ? baudRateSpinner.getSelectedItem().toString()
                 : "-";
         if ("-".equals(baudRateSelection.trim())) {
-            updateStatus("Select a baud rate before connecting.");
-            return;
+            updateSpinnerValue(R.id.baudRateSpinner, "9600 bps");
+            baudRateSelection = "9600 bps";
+            updateStatus("Defaulting baud rate to 9600 bps.");
         }
 
         String baudRateDigits = baudRateSelection.replaceAll("[^\\d]", "");
@@ -420,6 +445,9 @@ public class MainActivity extends AppCompatActivity {
 
     private void readReg3(Consumer<Reg3Flags> onSuccess) {
         readRegisters(0x06, 0x01, "C106", hexResponse -> {
+            if (hexResponse == null) {
+                return;
+            }
             String reg3Hex = hexResponse.substring(6, 8); // Extract REG3 (1 byte)
             int reg3Value = Integer.parseInt(reg3Hex, 16);
             onSuccess.accept(decodeReg3(reg3Value));
@@ -428,35 +456,58 @@ public class MainActivity extends AppCompatActivity {
 
 
     private void readRegisters(int startAddress, int length, String expectedHeader, Consumer<String> onSuccess) {
+        readRegisters(startAddress, length, expectedHeader, onSuccess, false);
+    }
+
+    private void readRegisters(int startAddress, int length, String expectedHeader, Consumer<String> onSuccess, boolean allowMismatch) {
         serialExecutor.execute(() -> {
             if (serialPort == null || !serialPort.isOpen()) {
                 updateStatus("Serial port not open. Connect first.");
                 return;
             }
             try {
+                // Clear any pending data in the buffer
+                byte[] clearBuffer = new byte[64];
+                serialPort.read(clearBuffer, 50);
+
                 // Prepare and send the read command
                 byte[] readCommand = new byte[]{(byte) 0xC1, (byte) startAddress, (byte) length};
                 serialPort.write(readCommand, 1000);
+                Log.d(TAG, "Sent command: C1 " + String.format("%02X", startAddress) + " " + String.format("%02X", length));
                 updateStatus("Reading registers...");
 
-                // Read the response
+                // Small delay to allow module to process command
+                Thread.sleep(50);
+
+                // Read the response with longer timeout
                 byte[] response = new byte[64];
-                int numBytesRead = serialPort.read(response, 1000);
+                int numBytesRead = serialPort.read(response, 2000);
 
                 if (numBytesRead > 0) {
                     String hexResponse = bytesToHex(response, numBytesRead);
-                    Log.d(TAG, "Raw response (hex): " + hexResponse);
+                    Log.d(TAG, "Raw response (hex): " + hexResponse + " (bytes: " + numBytesRead + ")");
 
                     // Validate the response header
                     if (hexResponse.startsWith(expectedHeader)) {
                         onSuccess.accept(hexResponse);
                         updateStatus("Register data updated.");
+                    } else if (allowMismatch) {
+                        Log.d(TAG, "Response header mismatch (allowed). Expected: " + expectedHeader + ", Got: " + hexResponse.substring(0, Math.min(6, hexResponse.length())));
+                        onSuccess.accept(null);
                     } else {
                         updateStatus("Unexpected response: " + hexResponse);
+                        Log.w(TAG, "Response header mismatch. Expected: " + expectedHeader + ", Got: " + hexResponse);
                     }
                 } else {
+                    Log.w(TAG, "No bytes read from serial port");
+                    if (allowMismatch) {
+                        onSuccess.accept(null);
+                    }
                     updateStatus("No response: CHECK MODULE STATUS");
                 }
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                Log.e(TAG, "Read interrupted", e);
             } catch (Exception e) {
                 updateStatus("Read failed: " + e.getMessage());
                 Log.e(TAG, "Error reading register", e);
@@ -525,7 +576,25 @@ public class MainActivity extends AppCompatActivity {
             if (data == null) {
                 return;
             }
-            readReg3(flags -> readProductInformation(info -> updateUiWithRegisterData(data, flags, info)));
+            Reg3Flags placeholderFlags = new Reg3Flags("Unknown", "Unknown", "Unknown", "Unknown");
+            updateUiWithRegisterData(data, placeholderFlags, null);
+
+            // Add small delay before next read to allow module to process
+            try {
+                Thread.sleep(100);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+
+            readReg3(flags -> {
+                // Add small delay before product info read
+                try {
+                    Thread.sleep(100);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
+                readProductInformation(info -> updateUiWithRegisterData(data, flags, info));
+            });
         });
     }
 
@@ -533,7 +602,7 @@ public class MainActivity extends AppCompatActivity {
         runOnUiThread(() -> {
             String safeProductInfo = productInfo == null ? "Model: Unknown\nVersion: Unknown" : productInfo;
             String info = safeProductInfo + "\n" +
-                    "Frequency: " + data.frequency + "\n" +
+                    "Frequency: " + data.frequency + " MHz\n" +
                     "Address: 0x" + data.addh + data.addl + "\n" +
                     "Network ID: " + data.netId + "\n" +
                     "Packet Size: " + data.packetSize + "\n" +
@@ -548,6 +617,11 @@ public class MainActivity extends AppCompatActivity {
                     "LBT Enable: " + flags.lbtEnable;
 
             infoTextView.setText(info);
+            infoTextView.setVisibility(android.view.View.VISIBLE);
+
+            // Update status to show successful read
+            connectionStatusTextView.setText("Status: Device data loaded successfully");
+            statusIndicator.setBackgroundResource(R.drawable.status_indicator_connected);
 
             updateSpinnerValue(R.id.baudRateSpinner, data.baudRate);
             updateSpinnerValue(R.id.airRateSpinner, data.airSpeed);
@@ -558,19 +632,25 @@ public class MainActivity extends AppCompatActivity {
             updateSpinnerValue(R.id.txModeSpinner, "Fixed-point");
             netIDTextView.setText(" " + data.netId);
             keyTextView.setText(" " + data.addh + data.addl);
-            updateSpinnerValue(R.id.relaySpinner, flags.relayFunction);
-            updateSpinnerValue(R.id.lbtSpinner, flags.lbtEnable);
-            updateSpinnerValue(R.id.packetRssiSpinner, flags.enableRssi);
-            updateSpinnerValue(R.id.channelRssiSpinner, flags.enableRssi);
+            if (!"Unknown".equals(flags.relayFunction)) {
+                updateSpinnerValue(R.id.relaySpinner, flags.relayFunction);
+            }
+            if (!"Unknown".equals(flags.lbtEnable)) {
+                updateSpinnerValue(R.id.lbtSpinner, flags.lbtEnable);
+            }
+            if (!"Unknown".equals(flags.enableRssi)) {
+                updateSpinnerValue(R.id.packetRssiSpinner, flags.enableRssi);
+                updateSpinnerValue(R.id.channelRssiSpinner, flags.enableRssi);
+            }
             frequencyTextView.setText(" " + data.frequency + " MHz");
         });
     }
 
     private void readProductInformation(Consumer<String> onSuccess) {
         readRegisters(0x80, 0x07, "C18007", hexResponse -> {
-            String info = parseAndDisplayProductInformation(hexResponse);
+            String info = hexResponse == null ? null : parseAndDisplayProductInformation(hexResponse);
             onSuccess.accept(info);
-        });
+        }, true);
     }
 
 
@@ -730,7 +810,17 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void updateStatus(String message) {
-        runOnUiThread(() -> connectionStatusTextView.setText("Status: " + message));
+        runOnUiThread(() -> {
+            connectionStatusTextView.setText("Status: " + message);
+            // Update status indicator based on connection state
+            if (message.toLowerCase().contains("connected at") || message.toLowerCase().contains("permission granted")) {
+                statusIndicator.setBackgroundResource(R.drawable.status_indicator_connected);
+            } else if (message.toLowerCase().contains("not connected") || message.toLowerCase().contains("failed") ||
+                       message.toLowerCase().contains("closed") || message.toLowerCase().contains("denied") ||
+                       message.toLowerCase().contains("no usb") || message.toLowerCase().contains("check module")) {
+                statusIndicator.setBackgroundResource(R.drawable.status_indicator_disconnected);
+            }
+        });
     }
 
     @Override
@@ -763,12 +853,12 @@ public class MainActivity extends AppCompatActivity {
 
 
     private void initializeSpinners() {
-        // Ebyte Device Spinner
-        ArrayAdapter<String> ebyteDeviceSpinner = new ArrayAdapter<>(
-                this, android.R.layout.simple_spinner_item,
-                new String[]{"E-22-400T22 USB", "DTU E-90"});
-        ebyteDeviceSpinner.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
-        ((Spinner) findViewById(R.id.deviceSpinner)).setAdapter(ebyteDeviceSpinner);
+        // Ebyte Device Spinner (AutoCompleteTextView)
+        String[] devices = new String[]{"E-22-400T22 USB", "DTU E-90"};
+        ArrayAdapter<String> deviceAdapter = new ArrayAdapter<>(
+                this, android.R.layout.simple_dropdown_item_1line, devices);
+        ebyteDeviceSpinner.setAdapter(deviceAdapter);
+        ebyteDeviceSpinner.setText(devices[0], false); // Set default value
 
         // Air Rate Spinner
         ArrayAdapter<String> airRateAdapter = new ArrayAdapter<>(

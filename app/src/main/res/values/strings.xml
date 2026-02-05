@@ -1,3 +1,35 @@
 <resources>
     <string name="app_name">HLINK Manager By ENORASYS</string>
+
+    <!-- Connection Card -->
+    <string name="device_connection">Device Connection</string>
+    <string name="select_device">Select Device</string>
+    <string name="connect">Connect</string>
+    <string name="disconnect">Disconnect</string>
+    <string name="status_not_connected">Status: Not connected</string>
+
+    <!-- Operations Card -->
+    <string name="device_operations">Device Operations</string>
+    <string name="read_device">Read Device</string>
+    <string name="write_device">Write Device</string>
+
+    <!-- Configuration Card -->
+    <string name="device_configuration">Device Configuration</string>
+    <string name="module_baud_rate">Module Baud Rate</string>
+    <string name="air_rate">Air Rate</string>
+    <string name="power">Power</string>
+    <string name="parity">Parity</string>
+    <string name="packet_size">Packet Size</string>
+    <string name="tx_mode">TX Mode</string>
+    <string name="channel">Channel</string>
+    <string name="frequency">Frequency</string>
+    <string name="net_id">NET ID</string>
+    <string name="key">Key</string>
+    <string name="wor_role">WOR Role</string>
+    <string name="wor_cycle">WOR Cycle</string>
+    <string name="relay">Relay</string>
+    <string name="lbt">LBT</string>
+    <string name="packet_rssi">Packet RSSI</string>
+    <string name="channel_rssi">Channel RSSI</string>
+    <string name="address">Address</string>
 </resources>
