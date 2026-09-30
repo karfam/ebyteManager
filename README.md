@@ -1,44 +1,26 @@
 # ebyteManager
 
-Android application for configuring and managing Ebyte LoRa modules over USB serial.
+An Android app for reading and configuring Ebyte LoRa modules over USB serial. The application ID is `gr.enorasys.loramanager`.
 
-## What the app does
+## Current scope and limitations
 
-- Connects to a USB serial device and requests Android USB permission automatically.
-- Reads module registers and displays decoded settings (frequency, NET ID, address, etc.).
-- Writes configuration changes back to the device.
+- The app recognizes the E-22-400T22U product ID. This is not a claim of verified hardware support; protocol mappings and hardware behavior still need manual and device validation.
+- DTU E-90 is not supported by this implementation.
+- Air-rate, WOR role/cycle, and channel-RSSI controls are read-only/disabled because their model-specific mappings have not been verified.
+- Writes require a successful read of a recognized module, show a preview and confirmation, preserve unmodified register bits from that read, and compare the resulting register data with a follow-up read. The write acknowledgement and whether C2 writes survive a power cycle remain unverified.
+- Use a USB OTG-capable Android device and connect only hardware you are prepared to configure. See [release readiness](RELEASE_READINESS.md) before testing or distribution.
 
-## Supported devices
+## Build requirements
 
-The device selector currently includes:
-
-- E-22-400T22 USB
-- DTU E-90
-
-## Supported configuration options
-
-The UI exposes the following settings for read/write operations:
-
-- Module baud rate, air rate, parity, packet size, transmit power
-- Channel and derived frequency
-- TX mode (fixed-point or transparent)
-- WOR role and cycle
-- Relay, LBT, packet RSSI, and channel RSSI
-- Address and NET ID
-
-## Requirements
-
-- Android Studio or the Android SDK
-- Java 11
-
-## Build
+- JDK 17 to run the Android Gradle Plugin; app Java source/target compatibility remains Java 11.
+- Android SDK Platform 36 and Build Tools 35.0.0.
 
 ```bash
 ./gradlew assembleDebug
-```
-
-## Test
-
-```bash
 ./gradlew test
+./gradlew lint
 ```
+
+## Publication
+
+This is an Android/Google Play project, not an Apple App Store app. It is not store-ready or store-approved. See [RELEASE_READINESS.md](RELEASE_READINESS.md) for remaining validation and owner tasks.
