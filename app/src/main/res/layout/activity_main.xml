@@ -271,7 +271,7 @@
                                 android:background="@drawable/grey_box_border"
                                 android:gravity="center_vertical"
                                 android:padding="12dp"
-                                android:text="Air Rate"
+                                android:text="@string/air_rate_unverified"
                                 android:textColor="@color/text_primary"
                                 android:textSize="14sp" />
 
@@ -421,7 +421,7 @@
                                 android:background="@drawable/grey_box_border"
                                 android:gravity="center_vertical"
                                 android:padding="12dp"
-                                android:text="Frequency"
+                                android:text="@string/frequency_estimate"
                                 android:textColor="@color/text_primary"
                                 android:textSize="14sp" />
 
@@ -506,7 +506,7 @@
                                 android:background="@drawable/grey_box_border"
                                 android:gravity="center_vertical"
                                 android:padding="12dp"
-                                android:text="WOR Role"
+                                android:text="@string/unsupported_wor_role"
                                 android:textColor="@color/text_primary"
                                 android:textSize="14sp" />
 
@@ -531,7 +531,7 @@
                                 android:background="@drawable/grey_box_border"
                                 android:gravity="center_vertical"
                                 android:padding="12dp"
-                                android:text="WOR Cycle"
+                                android:text="@string/unsupported_wor_cycle"
                                 android:textColor="@color/text_primary"
                                 android:textSize="14sp" />
 
@@ -631,7 +631,7 @@
                                 android:background="@drawable/grey_box_border"
                                 android:gravity="center_vertical"
                                 android:padding="12dp"
-                                android:text="Channel RSSI"
+                                android:text="@string/unsupported_channel_rssi"
                                 android:textColor="@color/text_primary"
                                 android:textSize="14sp" />
 

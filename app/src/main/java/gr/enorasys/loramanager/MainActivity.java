@@ -1,6 +1,7 @@
 package gr.enorasys.loramanager;
 
 import android.app.PendingIntent;
+import android.app.AlertDialog;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
@@ -18,11 +19,11 @@ import android.widget.Spinner;
 import android.widget.TextView;
 import android.view.View;
 import androidx.appcompat.app.AppCompatActivity;
-import androidx.appcompat.widget.Toolbar;
 import androidx.core.graphics.Insets;
 import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowCompat;
 import androidx.core.view.WindowInsetsCompat;
+import androidx.appcompat.widget.Toolbar;
 
 import com.hoho.android.usbserial.driver.UsbSerialDriver;
 import com.hoho.android.usbserial.driver.UsbSerialPort;
@@ -31,6 +32,7 @@ import com.hoho.android.usbserial.driver.UsbSerialProber;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
 
 public class MainActivity extends AppCompatActivity {
@@ -43,10 +45,21 @@ public class MainActivity extends AppCompatActivity {
     private Button connectButton, readRegisterButton,writeRegisterButton;
     private TextView connectionStatusTextView, infoTextView,frequencyTextView,netIDTextView,keyTextView;
     private View statusIndicator;
-    private UsbSerialPort serialPort;
+    private volatile UsbSerialPort serialPort;
     private UsbManager usbManager;
-    private String enableRssi, transmissionMethod, relayFunction, lbtEnable;
+    private UsbSerialDriver pendingDriver;
+    private int pendingPortIndex;
+    private UsbDevice connectedDevice;
     private final ExecutorService serialExecutor = Executors.newSingleThreadExecutor();
+    private final AtomicBoolean operationBusy = new AtomicBoolean();
+    private volatile boolean registerSnapshotAvailable;
+    private volatile boolean supportedModelDetected;
+    private volatile int lastReg1Value;
+    private volatile int lastReg3Value;
+    private volatile int lastReg0Value;
+    private volatile byte[] expectedReadback;
+    private volatile boolean writeVerificationPending;
+    private volatile boolean destroyed;
 
     private static class Reg3Flags {
         private final String enableRssi;
@@ -74,6 +87,8 @@ public class MainActivity extends AppCompatActivity {
         private final String channel;
         private final int channelValue;
         private final double frequency;
+        private final int reg0Value;
+        private final int reg1Value;
 
         private RegisterData(
                 String addh,
@@ -86,7 +101,9 @@ public class MainActivity extends AppCompatActivity {
                 String transmitPower,
                 String channel,
                 int channelValue,
-                double frequency
+                double frequency,
+                int reg0Value,
+                int reg1Value
         ) {
             this.addh = addh;
             this.addl = addl;
@@ -99,6 +116,8 @@ public class MainActivity extends AppCompatActivity {
             this.channel = channel;
             this.channelValue = channelValue;
             this.frequency = frequency;
+            this.reg0Value = reg0Value;
+            this.reg1Value = reg1Value;
         }
     }
 
@@ -107,16 +126,21 @@ public class MainActivity extends AppCompatActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
-
         WindowCompat.setDecorFitsSystemWindows(getWindow(), false);
-        ViewCompat.setOnApplyWindowInsetsListener(findViewById(R.id.rootLayout), (view, windowInsets) -> {
-            Insets insets = windowInsets.getInsets(
-                    WindowInsetsCompat.Type.systemBars()
-                            | WindowInsetsCompat.Type.displayCutout()
+        View root = findViewById(R.id.rootLayout);
+        int rootLeft = root.getPaddingLeft();
+        int rootTop = root.getPaddingTop();
+        int rootRight = root.getPaddingRight();
+        int rootBottom = root.getPaddingBottom();
+        ViewCompat.setOnApplyWindowInsetsListener(root, (view, insets) -> {
+            Insets bars = insets.getInsets(
+                    WindowInsetsCompat.Type.systemBars() | WindowInsetsCompat.Type.displayCutout()
                             | WindowInsetsCompat.Type.ime());
-            view.setPadding(insets.left, insets.top, insets.right, insets.bottom);
-            return windowInsets;
+            view.setPadding(rootLeft + bars.left, rootTop + bars.top,
+                    rootRight + bars.right, rootBottom + bars.bottom);
+            return insets;
         });
+        ViewCompat.requestApplyInsets(root);
 
         // Set up the toolbar
         Toolbar toolbar = findViewById(R.id.toolbar);
@@ -139,6 +163,10 @@ public class MainActivity extends AppCompatActivity {
         worRoleSpinner = findViewById(R.id.worRoleSpinner);
         worCycleSpinner = findViewById(R.id.worCycleSpinner);
         relaySpinner = findViewById(R.id.relaySpinner);
+        worRoleSpinner.setEnabled(false);
+        worCycleSpinner.setEnabled(false);
+        findViewById(R.id.channelRssiSpinner).setEnabled(false);
+        findViewById(R.id.airRateSpinner).setEnabled(false);
 
 
         initializeSpinners();
@@ -148,6 +176,7 @@ public class MainActivity extends AppCompatActivity {
 
         // Register USB permission broadcast receiver
         IntentFilter filter = new IntentFilter(ACTION_USB_PERMISSION);
+        filter.addAction(UsbManager.ACTION_USB_DEVICE_DETACHED);
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             registerReceiver(usbReceiver, filter, Context.RECEIVER_NOT_EXPORTED);
         } else {
@@ -163,7 +192,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void writeRegister() {
-        if (!DEVICE_WRITE_PROTOCOL_VERIFIED) {
+        if (!DEVICE_WRITE_PROTOCOL_VERIFIED || !registerSnapshotAvailable || !supportedModelDetected) {
             updateStatus("Configuration writes are disabled until the device protocol is verified.");
             return;
         }
@@ -171,9 +200,12 @@ public class MainActivity extends AppCompatActivity {
             updateStatus("Serial port not open. Connect first.");
             return;
         }
+        if (!registerSnapshotAvailable || !supportedModelDetected) {
+            updateStatus("Read a recognized E-22-400T22U first; write state is unavailable.");
+            return;
+        }
 
         Spinner baudRateSpinner = findViewById(R.id.baudRateSpinner);
-        Spinner airRateSpinner = findViewById(R.id.airRateSpinner);
         Spinner paritySpinner = findViewById(R.id.paritySpinner);
         Spinner packetSizeSpinner = findViewById(R.id.packetSizeSpinner);
         Spinner powerSpinner = findViewById(R.id.powerSpinner);
@@ -184,7 +216,6 @@ public class MainActivity extends AppCompatActivity {
         Spinner packetRssiSpinner = findViewById(R.id.packetRssiSpinner);
 
         String baudRateSelection = baudRateSpinner.getSelectedItem().toString();
-        String airRateSelection = airRateSpinner.getSelectedItem().toString();
         String paritySelection = paritySpinner.getSelectedItem().toString();
         String packetSizeSelection = packetSizeSpinner.getSelectedItem().toString();
         String powerSelection = powerSpinner.getSelectedItem().toString();
@@ -195,7 +226,6 @@ public class MainActivity extends AppCompatActivity {
         String packetRssiSelection = packetRssiSpinner.getSelectedItem().toString();
 
         if ("-".equals(baudRateSelection)
-                || "-".equals(airRateSelection)
                 || "-".equals(paritySelection)
                 || "-".equals(packetSizeSelection)
                 || "-".equals(powerSelection)
@@ -215,76 +245,104 @@ public class MainActivity extends AppCompatActivity {
             return;
         }
 
-        final String finalNetIdValue = netIdValue;
-        final String finalKeyValue = keyValue;
+        final String finalNetIdValue = netIdValue.replaceAll("\\s+", "");
+        final String finalKeyValue = keyValue.replaceAll("\\s+", "");
         if (!ConfigurationInput.isValidNetId(finalNetIdValue)
                 || !ConfigurationInput.isValidAddress(finalKeyValue)) {
-            updateStatus("Invalid address or NetID format.");
+            updateStatus("Address must be two hex digits and NetID must be four hex digits.");
+            return;
+        }
+        final int channelValue;
+        try {
+            channelValue = RegisterProtocol.parseChannel(channelSelection);
+        } catch (IllegalArgumentException e) {
+            updateStatus("Channel must be between 0 and 63.");
             return;
         }
 
-        serialExecutor.execute(() -> {
-            try {
-                int addh = Integer.parseInt(finalKeyValue.substring(0, 2), 16);
-                int addl = Integer.parseInt(finalKeyValue.substring(2, 4), 16);
-                int netId = Integer.parseInt(finalNetIdValue, 16);
+        String preview = "Address: " + finalKeyValue + "\nNetID: " + finalNetIdValue
+                + "\nBaud: " + baudRateSelection + "\nAir-rate register bits (unchanged): "
+                + (lastReg0Value & 0x07)
+                + "\nParity: " + paritySelection + "\nPacket size: " + packetSizeSelection
+                + "\nPower: " + powerSelection + "\nChannel: " + channelSelection
+                + "\nTX mode: " + txModeSelection
+                + "\nRelay: " + relaySelection + "\nLBT: " + lbtSelection
+                + "\nPacket RSSI: " + packetRssiSelection
+                + "\n\nRegister mappings, acknowledgement, and temporary/permanent write behavior"
+                + " have not been verified against a manual or hardware. Continue?";
+        new AlertDialog.Builder(this)
+                .setTitle("Review configuration write")
+                .setMessage(preview)
+                .setNegativeButton(android.R.string.cancel, null)
+                .setPositiveButton("Write", (dialog, which) -> {
+                    if (!operationBusy.compareAndSet(false, true)) {
+                        updateStatus("Another USB operation is in progress.");
+                        return;
+                    }
+                    setOperationBusy(true);
+                    serialExecutor.execute(() -> {
+                        boolean[] readbackStarted = {false};
+                        try {
+                            int addh = RegisterProtocol.parseHexField(finalKeyValue.substring(0, 2), 2);
+                            int addl = RegisterProtocol.parseHexField(finalKeyValue.substring(2, 4), 2);
+                            int netId = RegisterProtocol.parseHexField(finalNetIdValue, 2);
 
-                int baudRateBits = encodeBaudRate(baudRateSelection);
-                int parityBits = encodeParity(paritySelection);
-                int airRateBits = encodeAirRate(airRateSelection);
-                int packetSizeBits = encodePacketSize(packetSizeSelection);
-                int powerBits = encodeTransmitPower(powerSelection);
-                int channelValue = Integer.parseInt(channelSelection);
+                            int baudRateBits = encodeBaudRate(baudRateSelection);
+                            int parityBits = encodeParity(paritySelection);
+                            int packetSizeBits = encodePacketSize(packetSizeSelection);
+                            int powerBits = encodeTransmitPower(powerSelection);
 
-                int reg0 = (baudRateBits << 5) | (parityBits << 3) | airRateBits;
-                int reg1 = (packetSizeBits << 6) | powerBits;
+                            int reg0 = (baudRateBits << 5) | (parityBits << 3) | (lastReg0Value & 0x07);
+                            int reg1 = RegisterProtocol.updateReg1(lastReg1Value, packetSizeBits, powerBits);
+                            int reg3 = RegisterProtocol.updateReg3(
+                                    lastReg3Value,
+                                    "Enabled".equalsIgnoreCase(packetRssiSelection),
+                                    "Fixed-point".equalsIgnoreCase(txModeSelection.trim()),
+                                    "Enabled".equalsIgnoreCase(relaySelection),
+                                    "Enabled".equalsIgnoreCase(lbtSelection));
 
-                int reg3 = 0;
-                if ("Enabled".equalsIgnoreCase(packetRssiSelection)) {
-                    reg3 |= 0b1000_0000;
-                }
-                if ("Fixed-point".equalsIgnoreCase(txModeSelection) || "Fixed-point".equalsIgnoreCase(txModeSelection.trim())) {
-                    reg3 |= 0b0100_0000;
-                }
-                if ("Enabled".equalsIgnoreCase(relaySelection)) {
-                    reg3 |= 0b0010_0000;
-                }
-                if ("Enabled".equalsIgnoreCase(lbtSelection)) {
-                    reg3 |= 0b0001_0000;
-                }
+                            byte[] writeCommand = new byte[]{
+                                    (byte) 0xC2,
+                                    (byte) 0x00,
+                                    (byte) 0x07,
+                                    (byte) addh,
+                                    (byte) addl,
+                                    (byte) netId,
+                                    (byte) reg0,
+                                    (byte) reg1,
+                                    (byte) channelValue,
+                                    (byte) reg3
+                            };
 
-                byte[] writeCommand = new byte[]{
-                        (byte) 0xC2,
-                        (byte) 0x00,
-                        (byte) 0x07,
-                        (byte) addh,
-                        (byte) addl,
-                        (byte) netId,
-                        (byte) reg0,
-                        (byte) reg1,
-                        (byte) channelValue,
-                        (byte) reg3
-                };
-
-                serialPort.write(writeCommand, 1000);
-                updateStatus("Writing registers...");
-
-                byte[] response = new byte[64];
-                int numBytesRead = serialPort.read(response, 1000);
-                if (numBytesRead > 0) {
-                    String hexResponse = bytesToHex(response, numBytesRead);
-                    Log.d(TAG, "Write response (hex): " + hexResponse);
-                }
-
-                readMultipleRegisters();
-            } catch (NumberFormatException e) {
-                updateStatus("Invalid numeric selection.");
-                Log.e(TAG, "Invalid numeric selection", e);
-            } catch (Exception e) {
-                updateStatus("Write failed: " + e.getMessage());
-                Log.e(TAG, "Error writing register", e);
-            }
-        });
+                            expectedReadback = new byte[]{
+                                    (byte) addh, (byte) addl, (byte) netId, (byte) reg0,
+                                    (byte) reg1, (byte) channelValue, (byte) reg3
+                            };
+                            writeVerificationPending = true;
+                            serialPort.write(writeCommand, 1000);
+                            updateStatus("Write sent; checking register readback.");
+                            operationBusy.set(false);
+                            readbackStarted[0] = true;
+                            readMultipleRegisters();
+                        } catch (NumberFormatException e) {
+                            updateStatus("Invalid numeric selection.");
+                            Log.e(TAG, "Invalid numeric selection", e);
+                            writeVerificationPending = false;
+                            expectedReadback = null;
+                        } catch (Exception e) {
+                            updateStatus("Write failed: " + e.getMessage());
+                            Log.e(TAG, "Error writing register", e);
+                            writeVerificationPending = false;
+                            expectedReadback = null;
+                        } finally {
+                            if (!readbackStarted[0]) {
+                                operationBusy.set(false);
+                                setOperationBusy(false);
+                            }
+                        }
+                    });
+                })
+                .show();
     }
 
     private int encodeBaudRate(String baudRate) {
@@ -323,29 +381,6 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    private int encodeAirRate(String airRate) {
-        switch (airRate) {
-            case "0.8 kbps":
-                return 0;
-            case "1.2 kbps":
-                return 1;
-            case "2.4 kbps":
-                return 2;
-            case "4.8 kbps":
-                return 3;
-            case "9.6 kbps":
-                return 4;
-            case "19.2 kbps":
-                return 5;
-            case "38.4 kbps":
-                return 6;
-            case "62.5 kbps":
-                return 7;
-            default:
-                throw new NumberFormatException("Unsupported air rate");
-        }
-    }
-
     private int encodePacketSize(String packetSize) {
         switch (packetSize) {
             case "240 Bytes":
@@ -378,7 +413,16 @@ public class MainActivity extends AppCompatActivity {
 
     private void connectToSerialPort() {
         if (serialPort != null && serialPort.isOpen()) {
-            updateStatus("Already connected.");
+            if (!operationBusy.compareAndSet(false, true)) {
+                updateStatus("Another USB operation is in progress.");
+                return;
+            }
+            setOperationBusy(true);
+            serialExecutor.execute(() -> {
+                closeSerialPort();
+                operationBusy.set(false);
+                setOperationBusy(false);
+            });
             return;
         }
 
@@ -390,7 +434,48 @@ public class MainActivity extends AppCompatActivity {
             return;
         }
 
-        UsbSerialDriver driver = availableDrivers.get(0);
+        if (availableDrivers.size() > 1) {
+            String[] choices = new String[availableDrivers.size()];
+            for (int i = 0; i < choices.length; i++) {
+                UsbDevice device = availableDrivers.get(i).getDevice();
+                choices[i] = device.getDeviceName() + " (VID "
+                        + String.format("%04X", device.getVendorId()) + ", PID "
+                        + String.format("%04X", device.getProductId()) + ")";
+            }
+            new AlertDialog.Builder(this)
+                    .setTitle("Select USB serial device")
+                    .setItems(choices, (dialog, which) -> requestPermissionOrOpen(availableDrivers.get(which)))
+                    .setNegativeButton(android.R.string.cancel, null)
+                    .show();
+            return;
+        }
+        requestPermissionOrOpen(availableDrivers.get(0));
+    }
+
+    private void requestPermissionOrOpen(UsbSerialDriver driver) {
+        List<UsbSerialPort> ports = driver.getPorts();
+        if (ports.isEmpty()) {
+            updateStatus("Selected USB device has no serial ports.");
+            return;
+        }
+        if (ports.size() > 1) {
+            String[] portChoices = new String[ports.size()];
+            for (int i = 0; i < portChoices.length; i++) {
+                portChoices[i] = "Port " + (i + 1);
+            }
+            new AlertDialog.Builder(this)
+                    .setTitle("Select serial port")
+                    .setItems(portChoices, (dialog, which) -> requestPermissionOrOpen(driver, which))
+                    .setNegativeButton(android.R.string.cancel, null)
+                    .show();
+            return;
+        }
+        requestPermissionOrOpen(driver, 0);
+    }
+
+    private void requestPermissionOrOpen(UsbSerialDriver driver, int portIndex) {
+        pendingDriver = driver;
+        pendingPortIndex = portIndex;
         UsbDevice device = driver.getDevice();
 
         if (!usbManager.hasPermission(device)) {
@@ -405,7 +490,7 @@ public class MainActivity extends AppCompatActivity {
             }
             PendingIntent permissionIntent = PendingIntent.getBroadcast(
                     this,
-                    0,
+                    device.getDeviceId(),
                     intent,
                     permissionFlags
             );
@@ -414,6 +499,10 @@ public class MainActivity extends AppCompatActivity {
             return;
         }
 
+        openSelectedDriver(driver, device, portIndex);
+    }
+
+    private void openSelectedDriver(UsbSerialDriver driver, UsbDevice device, int portIndex) {
         Spinner baudRateSpinner = findViewById(R.id.baudRateSpinner);
         String baudRateSelection = baudRateSpinner.getSelectedItem() != null
                 ? baudRateSpinner.getSelectedItem().toString()
@@ -439,25 +528,57 @@ public class MainActivity extends AppCompatActivity {
             return;
         }
 
-        UsbDeviceConnection connection = usbManager.openDevice(device);
-        if (connection == null) {
-            updateStatus("Failed to open USB connection.");
-            Log.e(TAG, "Failed to open USB connection for device: " + device.getDeviceName());
+        if (!operationBusy.compareAndSet(false, true)) {
+            updateStatus("Another USB operation is in progress.");
             return;
         }
+        setOperationBusy(true);
+        serialExecutor.execute(() -> openSelectedDriverOnExecutor(driver, device, portIndex, baudRate));
+    }
 
+    private void openSelectedDriverOnExecutor(
+            UsbSerialDriver driver, UsbDevice device, int portIndex, int baudRate) {
+        UsbDeviceConnection connection = null;
+        UsbSerialPort selectedPort = null;
         try {
-            serialPort = driver.getPorts().get(0); // Get the first port
-            serialPort.open(connection);
-
-            serialPort.setParameters(baudRate, 8, UsbSerialPort.STOPBITS_1, UsbSerialPort.PARITY_NONE);
+            connection = usbManager.openDevice(device);
+            if (connection == null) {
+                updateStatus("Failed to open USB connection.");
+                return;
+            }
+            selectedPort = driver.getPorts().get(portIndex);
+            selectedPort.open(connection);
+            selectedPort.setParameters(baudRate, 8, UsbSerialPort.STOPBITS_1, UsbSerialPort.PARITY_NONE);
+            if (destroyed) {
+                selectedPort.close();
+                connection.close();
+                return;
+            }
+            serialPort = selectedPort;
+            connectedDevice = device;
+            pendingDriver = null;
+            if (destroyed) {
+                closeSerialPort();
+                return;
+            }
+            runOnUiThread(() -> connectButton.setText(R.string.disconnect));
             updateStatus("Connected at " + baudRate + " baud.");
-            Log.d(TAG, "Serial port opened successfully at " + baudRate + " baud.");
-            //readRegister();
         } catch (Exception e) {
             updateStatus("Connection failed: " + e.getMessage());
             Log.e(TAG, "Serial port connection failed.", e);
-            closeSerialPort();
+            if (selectedPort != null) {
+                try {
+                    selectedPort.close();
+                } catch (Exception closeException) {
+                    Log.e(TAG, "Failed to close serial port after connection failure.", closeException);
+                }
+            }
+            if (connection != null) connection.close();
+            serialPort = null;
+            pendingDriver = null;
+        } finally {
+            operationBusy.set(false);
+            setOperationBusy(false);
         }
     }
 
@@ -466,77 +587,59 @@ public class MainActivity extends AppCompatActivity {
     private void readReg3(Consumer<Reg3Flags> onSuccess) {
         readRegisters(0x06, 0x01, hexResponse -> {
             if (hexResponse == null) {
+                onSuccess.accept(null);
                 return;
             }
             String reg3Hex = hexResponse.substring(6, 8); // Extract REG3 (1 byte)
             int reg3Value = Integer.parseInt(reg3Hex, 16);
+            lastReg3Value = reg3Value;
+            registerSnapshotAvailable = true;
             onSuccess.accept(decodeReg3(reg3Value));
         });
     }
 
 
     private void readRegisters(int startAddress, int length, Consumer<String> onSuccess) {
-        readRegisters(startAddress, length, onSuccess, false);
-    }
-
-    private void readRegisters(int startAddress, int length, Consumer<String> onSuccess, boolean allowMismatch) {
         serialExecutor.execute(() -> {
             if (serialPort == null || !serialPort.isOpen()) {
                 updateStatus("Serial port not open. Connect first.");
+                onSuccess.accept(null);
                 return;
             }
+            String hexResponse;
             try {
-                // Clear any pending data in the buffer
-                byte[] clearBuffer = new byte[64];
-                serialPort.read(clearBuffer, 50);
-
-                // Prepare and send the read command
+                RegisterProtocol.drainPending(
+                        (buffer, timeout) -> serialPort.read(buffer, timeout), 64, 50);
+                byte[] header = new byte[]{(byte) 0xC1, (byte) startAddress, (byte) length};
                 byte[] readCommand = new byte[]{(byte) 0xC1, (byte) startAddress, (byte) length};
                 serialPort.write(readCommand, 1000);
-                Log.d(TAG, "Sent command: C1 " + String.format("%02X", startAddress) + " " + String.format("%02X", length));
+                Log.d(TAG, "Sent command: " + bytesToHex(readCommand, readCommand.length));
                 updateStatus("Reading registers...");
 
-                RegisterResponse.Accumulator response = new RegisterResponse.Accumulator(length);
-                long deadlineNanos = System.nanoTime() + 2_000_000_000L;
-                while (response.remaining() > 0) {
-                    long remainingNanos = deadlineNanos - System.nanoTime();
-                    if (remainingNanos <= 0) {
-                        break;
-                    }
-                    int timeoutMs = (int) Math.max(1, Math.min(remainingNanos / 1_000_000L, 250));
-                    byte[] chunk = new byte[response.remaining()];
-                    int bytesRead = serialPort.read(chunk, timeoutMs);
-                    if (bytesRead > 0) {
-                        response.append(chunk, bytesRead);
-                    }
-                }
-
-                if (response.isComplete(startAddress, length)) {
-                    byte[] completeResponse = response.getResponse();
-                    onSuccess.accept(bytesToHex(completeResponse, completeResponse.length));
-                    updateStatus("Register data updated.");
-                } else {
-                    if (allowMismatch) {
-                        onSuccess.accept(null);
-                    }
-                    updateStatus("Incomplete or unexpected register response.");
-                    Log.w(TAG, "Register response was incomplete or had an unexpected header.");
-                }
+                byte[] response = RegisterProtocol.readFrame(
+                        (buffer, timeout) -> serialPort.read(buffer, timeout), header, length, 2000);
+                hexResponse = bytesToHex(response, response.length);
             } catch (Exception e) {
                 updateStatus("Read failed: " + e.getMessage());
                 Log.e(TAG, "Error reading register", e);
+                onSuccess.accept(null);
+                return;
             }
+            updateStatus("Register data updated.");
+            onSuccess.accept(hexResponse);
         });
     }
 
 
     private RegisterData parseRegisterData(String hexResponse) {
         try {
-            if (hexResponse == null || hexResponse.length() != 18 || !hexResponse.startsWith("C10006")) {
-                updateStatus("Incomplete or unexpected register response.");
+            // Decode fields
+            if (hexResponse == null || hexResponse.length() != 18
+                    || !hexResponse.startsWith("C10006")
+                    || !hexResponse.matches("[0-9A-Fa-f]+")) {
+                updateStatus("Invalid register response.");
                 return null;
             }
-            // Decode fields
             String addh = hexResponse.substring(6, 8); // ADDH
             String addl = hexResponse.substring(8, 10); // ADDL
             String netId = hexResponse.substring(10, 12); // NETID
@@ -545,6 +648,7 @@ public class MainActivity extends AppCompatActivity {
             String channelHex = hexResponse.substring(16, 18); // Channel
             // Decode REG0
             int reg0Value = Integer.parseInt(reg0, 16);
+            lastReg0Value = reg0Value;
             String baudRate = decodeBaudRate((reg0Value >> 5) & 0b111);
             String parity = decodeParity((reg0Value >> 3) & 0b11);
             String airSpeed = decodeAirSpeed(reg0Value & 0b111);
@@ -552,11 +656,16 @@ public class MainActivity extends AppCompatActivity {
 
             // Decode REG1
             int reg1Value = Integer.parseInt(reg1, 16);
+            lastReg1Value = reg1Value;
             String packetSize = decodePacketSize((reg1Value >> 6) & 0b11);
             String transmitPower = decodeTransmitPower(reg1Value & 0b11);
 
             // Decode channel
             int channelValue = Integer.parseInt(channelHex, 16);
+            if (channelValue > 63) {
+                updateStatus("Invalid channel value in register response.");
+                return null;
+            }
             double frequency = 410.125 + channelValue; // Calculate actual frequency (MHz)
             String channel = String.valueOf(channelValue);
             return new RegisterData(
@@ -570,7 +679,9 @@ public class MainActivity extends AppCompatActivity {
                     transmitPower,
                     channel,
                     channelValue,
-                    frequency
+                    frequency,
+                    reg0Value,
+                    reg1Value
             );
         } catch (Exception e) {
             Log.e(TAG, "Error parsing register response", e);
@@ -580,47 +691,66 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private Reg3Flags decodeReg3(int reg3Value) {
-        // Decode individual fields
-        enableRssi = ((reg3Value >> 7) & 0b1) == 1 ? "Enabled" : "Disabled";
-        transmissionMethod = ConfigurationInput.decodeTransmissionMethod(reg3Value);
-        relayFunction = ((reg3Value >> 5) & 0b1) == 1 ? "Enabled" : "Disabled";
-        lbtEnable = ((reg3Value >> 4) & 0b1) == 1 ? "Enabled" : "Disabled";
+        String enableRssi = ((reg3Value >> 7) & 0b1) == 1 ? "Enabled" : "Disabled";
+        String transmissionMethod = ConfigurationInput.decodeTransmissionMethod(reg3Value);
+        String relayFunction = ((reg3Value >> 5) & 0b1) == 1 ? "Enabled" : "Disabled";
+        String lbtEnable = ((reg3Value >> 4) & 0b1) == 1 ? "Enabled" : "Disabled";
         return new Reg3Flags(enableRssi, transmissionMethod, relayFunction, lbtEnable);
     }
 
     private void readMultipleRegisters() {
+        if (!operationBusy.compareAndSet(false, true)) {
+            updateStatus("Another USB operation is in progress.");
+            return;
+        }
+        setOperationBusy(true);
+        registerSnapshotAvailable = false;
+        supportedModelDetected = false;
         readRegisters(0x00, 0x06, hexResponse -> {
             RegisterData data = parseRegisterData(hexResponse);
             if (data == null) {
+                writeVerificationPending = false;
+                expectedReadback = null;
+                operationBusy.set(false);
+                setOperationBusy(false);
                 return;
             }
-            Reg3Flags placeholderFlags = new Reg3Flags("Unknown", "Unknown", "Unknown", "Unknown");
-            updateUiWithRegisterData(data, placeholderFlags, null);
-
-            // Add small delay before next read to allow module to process
-            try {
-                Thread.sleep(100);
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-            }
-
             readReg3(flags -> {
-                // Add small delay before product info read
-                try {
-                    Thread.sleep(100);
-                } catch (InterruptedException e) {
-                    Thread.currentThread().interrupt();
-                }
-                readProductInformation(info -> updateUiWithRegisterData(data, flags, info));
+                Reg3Flags safeFlags = flags == null
+                        ? new Reg3Flags("Unknown", "Unknown", "Unknown", "Unknown") : flags;
+                readProductInformation(info -> {
+                    updateUiWithRegisterData(data, safeFlags, info);
+                    if (writeVerificationPending) {
+                        byte[] expected = expectedReadback;
+                        boolean matches = expected != null && registerSnapshotAvailable
+                                && supportedModelDetected
+                                && expected[0] == (byte) Integer.parseInt(data.addh, 16)
+                                && expected[1] == (byte) Integer.parseInt(data.addl, 16)
+                                && expected[2] == (byte) Integer.parseInt(data.netId, 16)
+                                && expected[3] == (byte) data.reg0Value
+                                && expected[4] == (byte) data.reg1Value
+                                && expected[5] == (byte) data.channelValue
+                                && expected[6] == (byte) lastReg3Value;
+                        updateStatus(matches
+                                ? "Register readback matches. Acknowledgement and power-cycle persistence are unverified."
+                                : "Write could not be verified by register readback.");
+                        expectedReadback = null;
+                        writeVerificationPending = false;
+                    }
+                    operationBusy.set(false);
+                    setOperationBusy(false);
+                });
             });
         });
     }
 
     private void updateUiWithRegisterData(RegisterData data, Reg3Flags flags, String productInfo) {
+        if (destroyed) return;
         runOnUiThread(() -> {
+            if (destroyed) return;
             String safeProductInfo = productInfo == null ? "Model: Unknown\nVersion: Unknown" : productInfo;
             String info = safeProductInfo + "\n" +
-                    "Frequency: " + data.frequency + " MHz\n" +
+                    "Frequency estimate (unverified): " + data.frequency + " MHz\n" +
                     "Address: 0x" + data.addh + data.addl + "\n" +
                     "Network ID: " + data.netId + "\n" +
                     "Packet Size: " + data.packetSize + "\n" +
@@ -638,11 +768,9 @@ public class MainActivity extends AppCompatActivity {
             infoTextView.setVisibility(android.view.View.VISIBLE);
 
             // Update status to show successful read
-            connectionStatusTextView.setText("Status: Device data loaded successfully");
-            statusIndicator.setBackgroundResource(R.drawable.status_indicator_connected);
+            updateStatus("Device data loaded successfully.");
 
             updateSpinnerValue(R.id.baudRateSpinner, data.baudRate);
-            updateSpinnerValue(R.id.airRateSpinner, data.airSpeed);
             updateSpinnerValue(R.id.powerSpinner, data.transmitPower);
             updateSpinnerValue(R.id.channelSpinner, data.channel);
             updateSpinnerValue(R.id.paritySpinner, data.parity);
@@ -669,16 +797,19 @@ public class MainActivity extends AppCompatActivity {
         readRegisters(0x80, 0x07, hexResponse -> {
             String info = hexResponse == null ? null : parseAndDisplayProductInformation(hexResponse);
             onSuccess.accept(info);
-        }, true);
+        });
     }
 
 
 
     private String parseAndDisplayProductInformation(String hexResponse) {
         try {
-            if (hexResponse == null || hexResponse.length() != 20 || !hexResponse.startsWith("C18007")) {
-                updateStatus("Incomplete or unexpected product information response.");
-                return "Model: Unknown\nVersion: Unknown";
+            // Validate response header
+            if (hexResponse == null || hexResponse.length() != 20
+                    || !hexResponse.startsWith("C18007")
+                    || !hexResponse.matches("[0-9A-Fa-f]+")) {
+                updateStatus("Unexpected product information response: " + hexResponse);
+                return null;
             }
 
             // Extract 7 bytes of product information
@@ -686,6 +817,7 @@ public class MainActivity extends AppCompatActivity {
 
             // Decode Model
             String model = decodeModel(pidHex.substring(0, 6));
+            supportedModelDetected = "E22-400T22U".equals(model);
 
             // Decode Version
             String version = decodeVersion(pidHex.substring(6, 14));
@@ -737,6 +869,7 @@ public class MainActivity extends AppCompatActivity {
         if (position >= 0) {
             spinner.setSelection(position);
         } else {
+            spinner.setSelection(0);
             Log.e("SpinnerUpdate", "Value \"" + value + "\" not found in Spinner with ID " + spinnerId);
         }
     }
@@ -779,26 +912,7 @@ public class MainActivity extends AppCompatActivity {
 
 
     private String decodeAirSpeed(int airSpeedBits) {
-        switch (airSpeedBits) {
-            case 0:
-                return "0.8 kbps";
-            case 1:
-                return "1.2 kbps";
-            case 2:
-                return "2.4 kbps";
-            case 3:
-                return "4.8 kbps";
-            case 4:
-                return "9.6 kbps";
-            case 5:
-                return "19.2 kbps";
-            case 6:
-                return "38.4 kbps";
-            case 7:
-                return "62.5 kbps";
-            default:
-                return "Unknown";
-        }
+        return "Register code " + airSpeedBits + " (unverified)";
     }
 
 
@@ -819,33 +933,48 @@ public class MainActivity extends AppCompatActivity {
         if (serialPort != null) {
             try {
                 serialPort.close();
-                serialPort = null;
+                connectedDevice = null;
                 updateStatus("Serial port closed.");
             } catch (Exception e) {
                 Log.e(TAG, "Failed to close serial port.", e);
+            } finally {
+                serialPort = null;
             }
+            connectedDevice = null;
+            registerSnapshotAvailable = false;
+            supportedModelDetected = false;
+            runOnUiThread(() -> {
+                if (!destroyed) connectButton.setText(R.string.connect);
+            });
         }
     }
 
-    private void updateStatus(String message) {
+    private void setOperationBusy(boolean busy) {
         runOnUiThread(() -> {
+            if (destroyed) return;
+            readRegisterButton.setEnabled(!busy);
+            writeRegisterButton.setEnabled(!busy);
+            connectButton.setEnabled(!busy);
+        });
+    }
+
+    private void updateStatus(String message) {
+        if (destroyed) return;
+        runOnUiThread(() -> {
+            if (destroyed) return;
             connectionStatusTextView.setText("Status: " + message);
-            // Update status indicator based on connection state
-            if (message.toLowerCase().contains("connected at") || message.toLowerCase().contains("permission granted")) {
-                statusIndicator.setBackgroundResource(R.drawable.status_indicator_connected);
-            } else if (message.toLowerCase().contains("not connected") || message.toLowerCase().contains("failed") ||
-                       message.toLowerCase().contains("closed") || message.toLowerCase().contains("denied") ||
-                       message.toLowerCase().contains("no usb") || message.toLowerCase().contains("check module")) {
-                statusIndicator.setBackgroundResource(R.drawable.status_indicator_disconnected);
-            }
+            boolean connected = serialPort != null && serialPort.isOpen();
+            statusIndicator.setBackgroundResource(connected
+                    ? R.drawable.status_indicator_connected : R.drawable.status_indicator_disconnected);
         });
     }
 
     @Override
     protected void onDestroy() {
+        destroyed = true;
         super.onDestroy();
-        closeSerialPort();
         serialExecutor.shutdownNow();
+        closeSerialPort();
         unregisterReceiver(usbReceiver);
     }
 
@@ -854,15 +983,26 @@ public class MainActivity extends AppCompatActivity {
         public void onReceive(Context context, Intent intent) {
             String action = intent.getAction();
             if (ACTION_USB_PERMISSION.equals(action)) {
-                synchronized (this) {
-                    UsbDevice device = intent.getParcelableExtra(UsbManager.EXTRA_DEVICE);
-                    if (intent.getBooleanExtra(UsbManager.EXTRA_PERMISSION_GRANTED, false)) {
-                        if (device != null) {
-                            updateStatus("Permission granted for device: " + device.getDeviceName());
-                            connectToSerialPort(); // Trigger connection only if permission granted
-                        }
-                    } else {
-                        updateStatus("Permission denied for device: " + (device != null ? device.getDeviceName() : "unknown"));
+                UsbDevice device = intent.getParcelableExtra(UsbManager.EXTRA_DEVICE);
+                if (device == null || pendingDriver == null || !device.equals(pendingDriver.getDevice())) {
+                    return;
+                }
+                if (intent.getBooleanExtra(UsbManager.EXTRA_PERMISSION_GRANTED, false)) {
+                    openSelectedDriver(pendingDriver, device, pendingPortIndex);
+                } else {
+                    pendingDriver = null;
+                    updateStatus("USB permission denied.");
+                }
+            } else if (UsbManager.ACTION_USB_DEVICE_DETACHED.equals(action)) {
+                UsbDevice device = intent.getParcelableExtra(UsbManager.EXTRA_DEVICE);
+                if (device != null && pendingDriver != null && device.equals(pendingDriver.getDevice())) {
+                    pendingDriver = null;
+                }
+                if (device != null && device.equals(connectedDevice)) {
+                    try {
+                        serialExecutor.execute(() -> closeSerialPort());
+                    } catch (RuntimeException ignored) {
+                        closeSerialPort();
                     }
                 }
             }
@@ -872,7 +1012,7 @@ public class MainActivity extends AppCompatActivity {
 
     private void initializeSpinners() {
         // Ebyte Device Spinner (AutoCompleteTextView)
-        String[] devices = new String[]{"E-22-400T22 USB"};
+        String[] devices = new String[]{"E-22-400T22U (protocol unverified)"};
         ArrayAdapter<String> deviceAdapter = new ArrayAdapter<>(
                 this, android.R.layout.simple_dropdown_item_1line, devices);
         ebyteDeviceSpinner.setAdapter(deviceAdapter);
@@ -881,7 +1021,7 @@ public class MainActivity extends AppCompatActivity {
         // Air Rate Spinner
         ArrayAdapter<String> airRateAdapter = new ArrayAdapter<>(
                 this, android.R.layout.simple_spinner_item,
-                new String[]{"-","2.4 kbps", "4.8 kbps", "9.6 kbps", "19.2 kbps", "38.4 kbps", "62.5 kbps"});
+                new String[]{"-", "Not verified"});
         airRateAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
         ((Spinner) findViewById(R.id.airRateSpinner)).setAdapter(airRateAdapter);
 
@@ -979,7 +1119,7 @@ public class MainActivity extends AppCompatActivity {
             case 0: return "8N1";
             case 1: return "8O1";
             case 2: return "8E1";
-            case 3: return "8N1";
+            case 3: return "Unknown";
             default: return "Unknown";
         }
     }
