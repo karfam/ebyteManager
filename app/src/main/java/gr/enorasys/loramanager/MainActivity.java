@@ -39,6 +39,7 @@ public class MainActivity extends AppCompatActivity {
 
     private static final String TAG = "loramanager";
     private static final String ACTION_USB_PERMISSION = "gr.enorasys.loramanager.USB_PERMISSION";
+    private static final boolean DEVICE_WRITE_PROTOCOL_VERIFIED = false;
     private AutoCompleteTextView ebyteDeviceSpinner;
     private Spinner worRoleSpinner, worCycleSpinner, relaySpinner;
     private Button connectButton, readRegisterButton,writeRegisterButton;
@@ -126,14 +127,15 @@ public class MainActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
         WindowCompat.setDecorFitsSystemWindows(getWindow(), false);
-        View root = findViewById(R.id.mainRoot);
+        View root = findViewById(R.id.rootLayout);
         int rootLeft = root.getPaddingLeft();
         int rootTop = root.getPaddingTop();
         int rootRight = root.getPaddingRight();
         int rootBottom = root.getPaddingBottom();
         ViewCompat.setOnApplyWindowInsetsListener(root, (view, insets) -> {
             Insets bars = insets.getInsets(
-                    WindowInsetsCompat.Type.systemBars() | WindowInsetsCompat.Type.displayCutout());
+                    WindowInsetsCompat.Type.systemBars() | WindowInsetsCompat.Type.displayCutout()
+                            | WindowInsetsCompat.Type.ime());
             view.setPadding(rootLeft + bars.left, rootTop + bars.top,
                     rootRight + bars.right, rootBottom + bars.bottom);
             return insets;
@@ -190,6 +192,10 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void writeRegister() {
+        if (!DEVICE_WRITE_PROTOCOL_VERIFIED || !registerSnapshotAvailable || !supportedModelDetected) {
+            updateStatus("Configuration writes are disabled until the device protocol is verified.");
+            return;
+        }
         if (serialPort == null || !serialPort.isOpen()) {
             updateStatus("Serial port not open. Connect first.");
             return;
@@ -241,8 +247,8 @@ public class MainActivity extends AppCompatActivity {
 
         final String finalNetIdValue = netIdValue.replaceAll("\\s+", "");
         final String finalKeyValue = keyValue.replaceAll("\\s+", "");
-        if (!finalNetIdValue.matches("[0-9A-Fa-f]{2}")
-                || !finalKeyValue.matches("[0-9A-Fa-f]{4}")) {
+        if (!ConfigurationInput.isValidNetId(finalNetIdValue)
+                || !ConfigurationInput.isValidAddress(finalKeyValue)) {
             updateStatus("Address must be two hex digits and NetID must be four hex digits.");
             return;
         }
@@ -686,7 +692,7 @@ public class MainActivity extends AppCompatActivity {
 
     private Reg3Flags decodeReg3(int reg3Value) {
         String enableRssi = ((reg3Value >> 7) & 0b1) == 1 ? "Enabled" : "Disabled";
-        String transmissionMethod = RegisterProtocol.transmissionMode(reg3Value);
+        String transmissionMethod = ConfigurationInput.decodeTransmissionMethod(reg3Value);
         String relayFunction = ((reg3Value >> 5) & 0b1) == 1 ? "Enabled" : "Disabled";
         String lbtEnable = ((reg3Value >> 4) & 0b1) == 1 ? "Enabled" : "Disabled";
         return new Reg3Flags(enableRssi, transmissionMethod, relayFunction, lbtEnable);

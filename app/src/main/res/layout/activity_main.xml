@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <androidx.coordinatorlayout.widget.CoordinatorLayout xmlns:android="http://schemas.android.com/apk/res/android"
-    android:id="@+id/mainRoot"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
+    android:id="@+id/rootLayout"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:background="@color/background"
@@ -174,7 +174,8 @@
                             android:layout_height="48dp"
                             android:layout_weight="1"
                             android:layout_marginStart="8dp"
-                            android:text="Write Device"
+                            android:enabled="false"
+                            android:text="Writes unavailable"
                             android:textAllCaps="false"
                             app:cornerRadius="8dp"
                             style="@style/Widget.App.Button.Warning" />
