@@ -19,6 +19,10 @@ import android.widget.TextView;
 import android.view.View;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.appcompat.widget.Toolbar;
+import androidx.core.graphics.Insets;
+import androidx.core.view.ViewCompat;
+import androidx.core.view.WindowCompat;
+import androidx.core.view.WindowInsetsCompat;
 
 import com.hoho.android.usbserial.driver.UsbSerialDriver;
 import com.hoho.android.usbserial.driver.UsbSerialPort;
@@ -33,6 +37,7 @@ public class MainActivity extends AppCompatActivity {
 
     private static final String TAG = "loramanager";
     private static final String ACTION_USB_PERMISSION = "gr.enorasys.loramanager.USB_PERMISSION";
+    private static final boolean DEVICE_WRITE_PROTOCOL_VERIFIED = false;
     private AutoCompleteTextView ebyteDeviceSpinner;
     private Spinner worRoleSpinner, worCycleSpinner, relaySpinner;
     private Button connectButton, readRegisterButton,writeRegisterButton;
@@ -103,6 +108,16 @@ public class MainActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
+        WindowCompat.setDecorFitsSystemWindows(getWindow(), false);
+        ViewCompat.setOnApplyWindowInsetsListener(findViewById(R.id.rootLayout), (view, windowInsets) -> {
+            Insets insets = windowInsets.getInsets(
+                    WindowInsetsCompat.Type.systemBars()
+                            | WindowInsetsCompat.Type.displayCutout()
+                            | WindowInsetsCompat.Type.ime());
+            view.setPadding(insets.left, insets.top, insets.right, insets.bottom);
+            return windowInsets;
+        });
+
         // Set up the toolbar
         Toolbar toolbar = findViewById(R.id.toolbar);
         setSupportActionBar(toolbar);
@@ -148,6 +163,10 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void writeRegister() {
+        if (!DEVICE_WRITE_PROTOCOL_VERIFIED) {
+            updateStatus("Configuration writes are disabled until the device protocol is verified.");
+            return;
+        }
         if (serialPort == null || !serialPort.isOpen()) {
             updateStatus("Serial port not open. Connect first.");
             return;
@@ -196,9 +215,10 @@ public class MainActivity extends AppCompatActivity {
             return;
         }
 
-        final String finalNetIdValue = netIdValue.replaceAll("\\s+", "");
-        final String finalKeyValue = keyValue.replaceAll("\\s+", "");
-        if (finalNetIdValue.length() != 2 || finalKeyValue.length() != 4) {
+        final String finalNetIdValue = netIdValue;
+        final String finalKeyValue = keyValue;
+        if (!ConfigurationInput.isValidNetId(finalNetIdValue)
+                || !ConfigurationInput.isValidAddress(finalKeyValue)) {
             updateStatus("Invalid address or NetID format.");
             return;
         }
@@ -444,7 +464,7 @@ public class MainActivity extends AppCompatActivity {
 
 
     private void readReg3(Consumer<Reg3Flags> onSuccess) {
-        readRegisters(0x06, 0x01, "C106", hexResponse -> {
+        readRegisters(0x06, 0x01, hexResponse -> {
             if (hexResponse == null) {
                 return;
             }
@@ -455,11 +475,11 @@ public class MainActivity extends AppCompatActivity {
     }
 
 
-    private void readRegisters(int startAddress, int length, String expectedHeader, Consumer<String> onSuccess) {
-        readRegisters(startAddress, length, expectedHeader, onSuccess, false);
+    private void readRegisters(int startAddress, int length, Consumer<String> onSuccess) {
+        readRegisters(startAddress, length, onSuccess, false);
     }
 
-    private void readRegisters(int startAddress, int length, String expectedHeader, Consumer<String> onSuccess, boolean allowMismatch) {
+    private void readRegisters(int startAddress, int length, Consumer<String> onSuccess, boolean allowMismatch) {
         serialExecutor.execute(() -> {
             if (serialPort == null || !serialPort.isOpen()) {
                 updateStatus("Serial port not open. Connect first.");
@@ -476,38 +496,32 @@ public class MainActivity extends AppCompatActivity {
                 Log.d(TAG, "Sent command: C1 " + String.format("%02X", startAddress) + " " + String.format("%02X", length));
                 updateStatus("Reading registers...");
 
-                // Small delay to allow module to process command
-                Thread.sleep(50);
-
-                // Read the response with longer timeout
-                byte[] response = new byte[64];
-                int numBytesRead = serialPort.read(response, 2000);
-
-                if (numBytesRead > 0) {
-                    String hexResponse = bytesToHex(response, numBytesRead);
-                    Log.d(TAG, "Raw response (hex): " + hexResponse + " (bytes: " + numBytesRead + ")");
-
-                    // Validate the response header
-                    if (hexResponse.startsWith(expectedHeader)) {
-                        onSuccess.accept(hexResponse);
-                        updateStatus("Register data updated.");
-                    } else if (allowMismatch) {
-                        Log.d(TAG, "Response header mismatch (allowed). Expected: " + expectedHeader + ", Got: " + hexResponse.substring(0, Math.min(6, hexResponse.length())));
-                        onSuccess.accept(null);
-                    } else {
-                        updateStatus("Unexpected response: " + hexResponse);
-                        Log.w(TAG, "Response header mismatch. Expected: " + expectedHeader + ", Got: " + hexResponse);
+                RegisterResponse.Accumulator response = new RegisterResponse.Accumulator(length);
+                long deadlineNanos = System.nanoTime() + 2_000_000_000L;
+                while (response.remaining() > 0) {
+                    long remainingNanos = deadlineNanos - System.nanoTime();
+                    if (remainingNanos <= 0) {
+                        break;
                     }
+                    int timeoutMs = (int) Math.max(1, Math.min(remainingNanos / 1_000_000L, 250));
+                    byte[] chunk = new byte[response.remaining()];
+                    int bytesRead = serialPort.read(chunk, timeoutMs);
+                    if (bytesRead > 0) {
+                        response.append(chunk, bytesRead);
+                    }
+                }
+
+                if (response.isComplete(startAddress, length)) {
+                    byte[] completeResponse = response.getResponse();
+                    onSuccess.accept(bytesToHex(completeResponse, completeResponse.length));
+                    updateStatus("Register data updated.");
                 } else {
-                    Log.w(TAG, "No bytes read from serial port");
                     if (allowMismatch) {
                         onSuccess.accept(null);
                     }
-                    updateStatus("No response: CHECK MODULE STATUS");
+                    updateStatus("Incomplete or unexpected register response.");
+                    Log.w(TAG, "Register response was incomplete or had an unexpected header.");
                 }
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-                Log.e(TAG, "Read interrupted", e);
             } catch (Exception e) {
                 updateStatus("Read failed: " + e.getMessage());
                 Log.e(TAG, "Error reading register", e);
@@ -518,6 +532,10 @@ public class MainActivity extends AppCompatActivity {
 
     private RegisterData parseRegisterData(String hexResponse) {
         try {
+            if (hexResponse == null || hexResponse.length() != 18 || !hexResponse.startsWith("C10006")) {
+                updateStatus("Incomplete or unexpected register response.");
+                return null;
+            }
             // Decode fields
             String addh = hexResponse.substring(6, 8); // ADDH
             String addl = hexResponse.substring(8, 10); // ADDL
@@ -564,14 +582,14 @@ public class MainActivity extends AppCompatActivity {
     private Reg3Flags decodeReg3(int reg3Value) {
         // Decode individual fields
         enableRssi = ((reg3Value >> 7) & 0b1) == 1 ? "Enabled" : "Disabled";
-        transmissionMethod = ((reg3Value >> 6) & 0b1) == 1 ? "Fixed-point" : "Transparent";
+        transmissionMethod = ConfigurationInput.decodeTransmissionMethod(reg3Value);
         relayFunction = ((reg3Value >> 5) & 0b1) == 1 ? "Enabled" : "Disabled";
         lbtEnable = ((reg3Value >> 4) & 0b1) == 1 ? "Enabled" : "Disabled";
         return new Reg3Flags(enableRssi, transmissionMethod, relayFunction, lbtEnable);
     }
 
     private void readMultipleRegisters() {
-        readRegisters(0x00, 0x06, "C10006", hexResponse -> {
+        readRegisters(0x00, 0x06, hexResponse -> {
             RegisterData data = parseRegisterData(hexResponse);
             if (data == null) {
                 return;
@@ -629,7 +647,9 @@ public class MainActivity extends AppCompatActivity {
             updateSpinnerValue(R.id.channelSpinner, data.channel);
             updateSpinnerValue(R.id.paritySpinner, data.parity);
             updateSpinnerValue(R.id.packetSizeSpinner, data.packetSize);
-            updateSpinnerValue(R.id.txModeSpinner, "Fixed-point");
+            if (!"Unknown".equals(flags.transmissionMethod)) {
+                updateSpinnerValue(R.id.txModeSpinner, flags.transmissionMethod);
+            }
             netIDTextView.setText(" " + data.netId);
             keyTextView.setText(" " + data.addh + data.addl);
             if (!"Unknown".equals(flags.relayFunction)) {
@@ -640,14 +660,13 @@ public class MainActivity extends AppCompatActivity {
             }
             if (!"Unknown".equals(flags.enableRssi)) {
                 updateSpinnerValue(R.id.packetRssiSpinner, flags.enableRssi);
-                updateSpinnerValue(R.id.channelRssiSpinner, flags.enableRssi);
             }
             frequencyTextView.setText(" " + data.frequency + " MHz");
         });
     }
 
     private void readProductInformation(Consumer<String> onSuccess) {
-        readRegisters(0x80, 0x07, "C18007", hexResponse -> {
+        readRegisters(0x80, 0x07, hexResponse -> {
             String info = hexResponse == null ? null : parseAndDisplayProductInformation(hexResponse);
             onSuccess.accept(info);
         }, true);
@@ -657,10 +676,9 @@ public class MainActivity extends AppCompatActivity {
 
     private String parseAndDisplayProductInformation(String hexResponse) {
         try {
-            // Validate response header
-            if (!hexResponse.startsWith("C18007")) {
-                updateStatus("Unexpected product information response: " + hexResponse);
-                return hexResponse;
+            if (hexResponse == null || hexResponse.length() != 20 || !hexResponse.startsWith("C18007")) {
+                updateStatus("Incomplete or unexpected product information response.");
+                return "Model: Unknown\nVersion: Unknown";
             }
 
             // Extract 7 bytes of product information
@@ -854,7 +872,7 @@ public class MainActivity extends AppCompatActivity {
 
     private void initializeSpinners() {
         // Ebyte Device Spinner (AutoCompleteTextView)
-        String[] devices = new String[]{"E-22-400T22 USB", "DTU E-90"};
+        String[] devices = new String[]{"E-22-400T22 USB"};
         ArrayAdapter<String> deviceAdapter = new ArrayAdapter<>(
                 this, android.R.layout.simple_dropdown_item_1line, devices);
         ebyteDeviceSpinner.setAdapter(deviceAdapter);
@@ -877,7 +895,7 @@ public class MainActivity extends AppCompatActivity {
         //Parity Spinner
         ArrayAdapter<String> parityAdapter = new ArrayAdapter<>(
                 this, android.R.layout.simple_spinner_item,
-                new String[]{"-","8N1", "8O1", "8E1", "8N1"});
+                new String[]{"-","8N1", "8O1", "8E1"});
         parityAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
         ((Spinner) findViewById(R.id.paritySpinner)).setAdapter(parityAdapter);
 
